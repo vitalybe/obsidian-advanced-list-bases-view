@@ -45,7 +45,7 @@ export class ListAdvancedView extends BasesView {
     }
 
     const entries = this.data.data;
-    const properties = this.data.properties || [];
+    const properties = this.config.getOrder() || [];
 
     // Render each entry
     for (let index = 0; index < entries.length; index++) {
