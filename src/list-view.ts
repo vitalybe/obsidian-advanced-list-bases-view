@@ -53,50 +53,52 @@ export class ListAdvancedView extends BasesView {
       const entryEl = this.containerEl.createDiv("bases-list-entry");
 
       // Render each property
-      properties.forEach((prop) => {
+      for (const prop of properties) {
         try {
           const value = entry.getValue(prop);
           if (value && value.isTruthy()) {
-            const propLineEl = entryEl.createDiv("bases-list-property");
+            const valueStr = value.toString();
 
-            // Add property label
-            const labelEl = propLineEl.createSpan("bases-list-property-label");
-            labelEl.textContent = this.config.getDisplayName(prop) + ": ";
+            // Check if this is a dynamic template directive
+            if (valueStr.startsWith("!dynamic=")) {
+              const templatePath = valueStr.substring("!dynamic=".length);
+              const templateEl = entryEl.createDiv("bases-list-template");
+              const filePath = entry.file.path;
 
-            // Add property value
-            const valueEl = propLineEl.createSpan("bases-list-property-value");
-            value.renderTo(valueEl, this.app.renderContext);
+              try {
+                // Read template file
+                const templateFile = this.app.vault.getAbstractFileByPath(templatePath);
+                if (templateFile && templateFile instanceof TFile) {
+                  const templateContent = await this.app.vault.read(templateFile);
+
+                  // Replace placeholder with actual file path
+                  const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
+
+                  await MarkdownRenderer.render(this.app, renderedContent, templateEl, filePath, this);
+                } else {
+                  templateEl.createEl("div", { text: `Template file not found: ${templatePath}` });
+                }
+              } catch (error) {
+                console.error(`Error rendering template for ${filePath}:`, error);
+                templateEl.createEl("div", { text: `Error: ${error.message}` });
+              }
+            } else {
+              // Render normal property
+              const propLineEl = entryEl.createDiv("bases-list-property");
+
+              // Add property value
+              const valueEl = propLineEl.createSpan("bases-list-property-value");
+              value.renderTo(valueEl, this.app.renderContext);
+            }
           }
         } catch (error) {
           console.error(`Error rendering property ${prop}:`, error);
         }
-      });
-
-      // Add template content
-      const templateEl = entryEl.createDiv("bases-list-template");
-      const filePath = entry.file.path;
-
-      try {
-        // Read template file
-        const templateFile = this.app.vault.getAbstractFileByPath("__Templates/TEMPLATE PART - Targets.md");
-        if (templateFile && templateFile instanceof TFile) {
-          const templateContent = await this.app.vault.read(templateFile);
-
-          // Replace placeholder with actual file path
-          const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
-
-          await MarkdownRenderer.render(this.app, renderedContent, templateEl, filePath, this);
-        } else {
-          templateEl.createEl("div", { text: "Template file not found" });
-        }
-      } catch (error) {
-        console.error(`Error rendering template for ${filePath}:`, error);
-        templateEl.createEl("div", { text: `Error: ${error.message}` });
       }
 
       // Add horizontal rule between entries (but not after the last one)
       if (index < entries.length - 1) {
-        this.containerEl.createEl("hr");
+        this.containerEl.createEl("hr", { cls: "advanced-list-entry-separator" });
       }
     }
 
