@@ -1,4 +1,4 @@
-import { BasesView, QueryController, ViewOption } from "obsidian";
+import { BasesView, MarkdownRenderer, QueryController, ViewOption } from "obsidian";
 
 export const ListAdvancedType = "list-advanced";
 export class ListAdvancedView extends BasesView {
@@ -29,10 +29,10 @@ export class ListAdvancedView extends BasesView {
   public onDataUpdated(): void {
     this.debugLog("onDataUpdated");
     this.containerEl.removeClass("is-loading");
-    this.renderList();
+    void this.renderList();
   }
 
-  private renderList(): void {
+  private async renderList(): Promise<void> {
     // Clear existing content
     this.containerEl.empty();
 
@@ -44,8 +44,10 @@ export class ListAdvancedView extends BasesView {
     const properties = this.data.properties || [];
 
     this.debugLog(`Rendering ${entries.length} entries: `, entries);
+
     // Render each entry
-    entries.forEach((entry, index) => {
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
       const entryEl = this.containerEl.createDiv("bases-list-entry");
 
       // Render each property
@@ -68,11 +70,30 @@ export class ListAdvancedView extends BasesView {
         }
       });
 
+      // Add meta-bind input
+      const metaBindEl = entryEl.createDiv("bases-list-meta-bind");
+      const filePath = entry.file.path;
+      const metaBindMarkdown = `\`\`\`meta-bind
+INPUT[textArea:${filePath}#md-title]
+\`\`\``;
+
+      try {
+        await MarkdownRenderer.render(
+          this.app,
+          metaBindMarkdown,
+          metaBindEl,
+          filePath,
+          this
+        );
+      } catch (error) {
+        console.error(`Error rendering meta-bind for ${filePath}:`, error);
+      }
+
       // Add horizontal rule between entries (but not after the last one)
       if (index < entries.length - 1) {
         this.containerEl.createEl("hr");
       }
-    });
+    }
   }
 
   public setEphemeralState(state: unknown): void {}
