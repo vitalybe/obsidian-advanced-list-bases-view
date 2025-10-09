@@ -12,7 +12,6 @@ export class ListAdvancedView extends BasesView {
 
   constructor(controller: QueryController, scrollEl: HTMLElement) {
     super(controller);
-    this.scrollEl = scrollEl;
     this.containerEl = scrollEl.createDiv({ cls: "bases-advanced-list-container is-loading", attr: { tabIndex: 0 } });
   }
 
@@ -33,6 +32,11 @@ export class ListAdvancedView extends BasesView {
   }
 
   private async renderList(): Promise<void> {
+    // Save scroll position before clearing
+    const editor = this.app.workspace.activeEditor?.editor;
+    const scrollTop = editor?.getScrollInfo().top || 0;
+    this.debugLog("Saving scroll position", scrollTop);
+
     // Clear existing content
     this.containerEl.empty();
 
@@ -42,8 +46,6 @@ export class ListAdvancedView extends BasesView {
 
     const entries = this.data.data;
     const properties = this.data.properties || [];
-
-    this.debugLog(`Rendering ${entries.length} entries: `, entries);
 
     // Render each entry
     for (let index = 0; index < entries.length; index++) {
@@ -83,13 +85,7 @@ export class ListAdvancedView extends BasesView {
           // Replace placeholder with actual file path
           const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
 
-          await MarkdownRenderer.render(
-            this.app,
-            renderedContent,
-            templateEl,
-            filePath,
-            this
-          );
+          await MarkdownRenderer.render(this.app, renderedContent, templateEl, filePath, this);
         } else {
           templateEl.createEl("div", { text: "Template file not found" });
         }
@@ -103,12 +99,10 @@ export class ListAdvancedView extends BasesView {
         this.containerEl.createEl("hr");
       }
     }
-  }
 
-  public setEphemeralState(state: unknown): void {}
-
-  public getEphemeralState(): unknown {
-    return {};
+    // Restore scroll position after rendering
+    this.debugLog("Restoring scroll position", scrollTop);
+    editor?.scrollTo(null, scrollTop);
   }
 
   static getViewOptions(): ViewOption[] {
