@@ -1,4 +1,4 @@
-import { BasesView, MarkdownRenderer, QueryController, ViewOption } from "obsidian";
+import { BasesView, MarkdownRenderer, QueryController, TFile, ViewOption } from "obsidian";
 
 export const ListAdvancedType = "list-advanced";
 export class ListAdvancedView extends BasesView {
@@ -70,23 +70,32 @@ export class ListAdvancedView extends BasesView {
         }
       });
 
-      // Add meta-bind input
-      const metaBindEl = entryEl.createDiv("bases-list-meta-bind");
+      // Add template content
+      const templateEl = entryEl.createDiv("bases-list-template");
       const filePath = entry.file.path;
-      const metaBindMarkdown = `\`\`\`meta-bind
-INPUT[textArea:${filePath}#md-title]
-\`\`\``;
 
       try {
-        await MarkdownRenderer.render(
-          this.app,
-          metaBindMarkdown,
-          metaBindEl,
-          filePath,
-          this
-        );
+        // Read template file
+        const templateFile = this.app.vault.getAbstractFileByPath("__Templates/TEMPLATE PART - Targets.md");
+        if (templateFile && templateFile instanceof TFile) {
+          const templateContent = await this.app.vault.read(templateFile);
+
+          // Replace placeholder with actual file path
+          const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
+
+          await MarkdownRenderer.render(
+            this.app,
+            renderedContent,
+            templateEl,
+            filePath,
+            this
+          );
+        } else {
+          templateEl.createEl("div", { text: "Template file not found" });
+        }
       } catch (error) {
-        console.error(`Error rendering meta-bind for ${filePath}:`, error);
+        console.error(`Error rendering template for ${filePath}:`, error);
+        templateEl.createEl("div", { text: `Error: ${error.message}` });
       }
 
       // Add horizontal rule between entries (but not after the last one)
