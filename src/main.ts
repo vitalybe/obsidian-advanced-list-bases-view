@@ -1,16 +1,15 @@
-import { Plugin } from 'obsidian';
-import { MapView } from './map-view';
+import { Plugin } from "obsidian";
+import { ListAdvancedView } from "./list-view";
 
-export default class ObsidianMapsPlugin extends Plugin {
-	async onload() {
-		this.registerBasesView('map', {
-			name: 'Map',
-			icon: 'lucide-map',
-			factory: (controller, containerEl) => new MapView(controller, containerEl),
-			options: MapView.getViewOptions,
-		});
-	}
+export default class ObsidianAdvancedListPlugin extends Plugin {
+  async onload() {
+    this.registerBasesView("list-advanced", {
+      name: "List Advanced",
+      icon: "lucide-scroll-text",
+      factory: (controller, containerEl) => new ListAdvancedView(controller, containerEl),
+      options: ListAdvancedView.getViewOptions,
+    });
+  }
 
-	onunload() {
-	}
+  onunload() {}
 }
