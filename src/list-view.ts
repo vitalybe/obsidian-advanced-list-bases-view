@@ -56,7 +56,7 @@ export class ListAdvancedView extends BasesView {
       for (const prop of properties) {
         try {
           const value = entry.getValue(prop);
-          if (value && value.isTruthy()) {
+          if (value) {
             const valueStr = value.toString();
 
             // Check if this is a dynamic template directive
@@ -82,11 +82,11 @@ export class ListAdvancedView extends BasesView {
                 console.error(`Error rendering template for ${filePath}:`, error);
                 templateEl.createEl("div", { text: `Error: ${error.message}` });
               }
-            } else {
-              // Render normal property
+            } else if (valueStr.trim() !== "") {
               const propLineEl = entryEl.createDiv("bases-list-property");
-
-              // Add property value
+              const labelEl = propLineEl.createSpan("bases-list-property-label");
+              labelEl.textContent = this.config.getDisplayName(prop) + ":";
+              // Render normal property
               const valueEl = propLineEl.createSpan("bases-list-property-value");
               value.renderTo(valueEl, this.app.renderContext);
             }

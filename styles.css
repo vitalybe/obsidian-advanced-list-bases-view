@@ -10,3 +10,14 @@ body {
   margin-bottom: 10px !important;
   border-top: 3px solid var(--interactive-accent);
 }
+
+.bases-list-property {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+}
+
+.bases-list-property-label {
+  font-weight: bold;
+  color: var(--text-muted);
+}
