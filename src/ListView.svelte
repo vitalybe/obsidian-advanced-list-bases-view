@@ -10,14 +10,6 @@
   export let renderContext: RenderContext | undefined = undefined;
   export let component: any = undefined;
 
-  // option(Eli, Eli 👦🏻),
-  // option(Emily, Emily 👧🏽),
-  // option(Lia, Lia 👧🏼),
-  // option(Inga, Inga 👸🏻),
-  // option(Esty, Esty 🌸)
-  // option(Pub, Pub 🍺)
-  // option(Vitaly, Vitaly 👨🏻)
-
   enum GroupsEnum {
     KIDS = "Kids",
     ANIMALS = "Animals",
@@ -266,7 +258,7 @@
     let target: string | undefined;
 
     const activeFileMetadata = getActiveFileMetadata();
-    const targets = activeFileMetadata?.frontmatter[TARGETS_PROPERTY];
+    const targets = activeFileMetadata?.frontmatter?.[TARGETS_PROPERTY];
     debugLog("getActiveFileTarget", targets);
     if (targets) {
       if (Array.isArray(targets)) {
@@ -317,13 +309,41 @@
 
   function handleDelete(entry: ListEntry) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      frontmatter["md_deleted"] = true;
+      frontmatter[DELETE_PROPERTY] = true;
+    });
+  }
+
+  function handleTargetSelect(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const selectedTarget = select.value;
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      if (selectedTarget === "") {
+        // Remove the property if "None" is selected
+        delete frontmatter[TARGETS_PROPERTY];
+      } else {
+        // Set the target as an array with the selected value
+        frontmatter[TARGETS_PROPERTY] = [selectedTarget];
+      }
     });
   }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
+  <div class="target-selector">
+    <label for="active-target-select">Select your target:</label>
+    <select id="active-target-select" value={activeTarget || ""} on:change={handleTargetSelect}>
+      <option value="">All</option>
+      {#each targets as target}
+        <option value={target.value}>{target.label}</option>
+      {/each}
+    </select>
+  </div>
+
   {#each entryData as { entry, properties: props }, index (entry.file.path)}
     <div class="entry">
       {#each props as propData (propData.prop)}
@@ -384,6 +404,35 @@
 
   .container:focus {
     outline: none;
+  }
+
+  .target-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+  .target-selector label {
+    font-weight: 500;
+    color: var(--text-normal);
+  }
+
+  .target-selector select {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+
+  .target-selector select:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
   }
 
   .entry {
