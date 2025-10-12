@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MarkdownRenderer, TFile, type App, type RenderContext } from "obsidian";
+  import { MarkdownRenderer, TFile, type App, type FrontMatterCache, type RenderContext } from "obsidian";
   import type { ListEntry, Config, PropertyData } from "./types";
 
   // Props with defaults to prevent undefined errors
@@ -41,6 +41,9 @@
     { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
   ];
 
+  const TARGETS_PROPERTY = "md-targets";
+  const TARGETS_DONE_PROPERTY = "md-targets-done";
+
   // Reactive data structure for entries
   let entryData: Array<{
     entry: ListEntry;
@@ -50,6 +53,10 @@
   // Reactively process entries when they change
   $: {
     processEntries(entries, properties);
+  }
+
+  function debugLog(message: string, ...args: unknown[]): void {
+    console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
   }
 
   async function processEntries(entries: ListEntry[], properties: string[]) {
@@ -149,6 +156,36 @@
     };
   }
 
+  function getActiveFileMetadata(): FrontMatterCache | undefined {
+    let metadata: FrontMatterCache | undefined;
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (activeFile) {
+      metadata = app.metadataCache.getFileCache(activeFile) ?? undefined;
+    }
+
+    return metadata;
+  }
+
+  function getEntryFileMetadata(entry: ListEntry): FrontMatterCache | undefined {
+    let metadata: FrontMatterCache | undefined;
+    const entryFile = entry.file;
+    metadata = app.metadataCache.getFileCache(entryFile) ?? undefined;
+    return metadata;
+  }
+
+  function handleTargetClick(entry: ListEntry) {
+    console.log("handleTargetClick", entry);
+    const activeFileMetadata = getActiveFileMetadata();
+    if (!activeFileMetadata) return;
+    const entryFile = entry.file;
+    const entryFileMetadata = app.metadataCache.getFileCache(entryFile);
+    app.fileManager.processFrontMatter(entryFile, (frontmatter) => {
+      frontmatter["md-targets"] = ["A", "B", "C"];
+      console.log(frontmatter);
+    });
+  }
+
   function renderPropertyValue(element: HTMLElement, value: any) {
     // Render property value when element is mounted
     if (value && renderContext) {
@@ -170,52 +207,56 @@
     };
   }
 
-  function handleTargetClick(entry: ListEntry) {
-    console.log("handleTargetClick", entry);
-    const activeFile = app.workspace.activeEditor?.file;
-    const entryFile = entry.file;
-    const entryFileMetadata = app.metadataCache.getFileCache(entryFile);
-    app.fileManager.processFrontMatter(entryFile, (frontmatter) => {
-      frontmatter["md-targets"] = ["A", "B", "C"];
-      console.log(frontmatter);
-    });
+  function getTargetValue(entry: ListEntry, target: { value: string; label: string; groups: GroupsEnum[] }): boolean {
+    debugLog("getTargetValue", entry, target);
+    const entryFileMetadata = getEntryFileMetadata(entry);
+    if (!entryFileMetadata) return false;
+    const targets = entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
+    return targets.includes(target.value);
   }
 
-  // if (file) {
-  //   const metadata = app.metadataCache.getFileCache(file!);
-  //   const targets = metadata?.frontmatter["md-targets"] as string[];
-  //   if (targets) {
-  //     targets.push(entry.file.path);
-  //     metadata.frontmatter["md-targets"] = targets;
-  //   }
-  // }
+  function handleTargetChange(entry: ListEntry, target: { value: string; label: string; groups: GroupsEnum[] }) {
+    debugLog("handleTargetChange", entry, target);
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+      targets.push(target.value);
+      frontmatter[TARGETS_PROPERTY] = targets;
+    });
+  }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div class="bases-advanced-list-container" tabindex="0" role="region" aria-label="List view">
   {#each entryData as { entry, properties: props }, index (entry.file.path)}
-    <div class="bases-list-entry">
+    <div class="entry">
       {#each props as propData (propData.prop)}
         {#if propData.type === "template"}
-          <div
-            class="bases-list-template"
-            use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}
-          ></div>
+          <div class="template" use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}></div>
         {:else if propData.type === "property"}
-          <div class="bases-list-property">
-            <span class="bases-list-property-label">{propData.label}:</span>
-            <span class="bases-list-property-value" use:renderPropertyValue={propData.value}></span>
+          <div class="property">
+            <span class="property-label">{propData.label}:</span>
+            <span class="property-value" use:renderPropertyValue={propData.value}></span>
           </div>
         {:else if propData.type === "error"}
-          <div class="bases-list-error">{propData.message}</div>
+          <div class="error">{propData.message}</div>
         {/if}
       {/each}
     </div>
-    <div class="bases-list-target-container">
-      <button class="bases-list-target-button" on:click={() => handleTargetClick(entry)}>Target</button>
+    <div class="target-container">
+      {#each targets as target}
+        <div class="target">
+          <input
+            type="checkbox"
+            class="target-checkbox"
+            checked={getTargetValue(entry, target)}
+            on:change={() => handleTargetChange(entry, target)}
+          />
+          <span class="target-label">{target.label}</span>
+        </div>
+      {/each}
     </div>
     {#if index < entryData.length - 1}
-      <hr class="advanced-list-entry-separator" />
+      <hr class="entry-separator" />
     {/if}
   {/each}
 </div>
@@ -229,26 +270,32 @@
     outline: none;
   }
 
-  .bases-list-entry {
+  .entry {
     margin-bottom: 0.5rem;
   }
 
-  .bases-list-property {
+  .property {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 0.25rem;
   }
 
-  .bases-list-property-label {
+  .property-label {
     font-weight: 500;
   }
 
-  .bases-list-error {
+  .error {
     color: var(--text-error);
     font-style: italic;
   }
 
-  .advanced-list-entry-separator {
+  .target-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .entry-separator {
     margin: 1rem 0;
     border: none;
     border-top: 1px solid var(--background-modifier-border);
