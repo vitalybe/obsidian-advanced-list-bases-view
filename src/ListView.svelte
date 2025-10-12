@@ -46,6 +46,9 @@
   let activeTarget: string | undefined;
   let activeTargetLabel: string | null;
 
+  // Track expanded entries (those with collapsed targets)
+  let expandedEntries = new Set<string>();
+
   // Reactively process entries when they change
   $: {
     processEntries(entries, properties);
@@ -331,9 +334,27 @@
     });
   }
 
-  function getIsAboutToDisappear(entry: ListEntry): boolean {
-    const value: { data: boolean } | undefined = entry.getValue("formula.fnIsItemAboutToDisappear");
+  function getBooleanValue(entry: ListEntry, prop: string): boolean {
+    const value: { data: boolean } | undefined = entry.getValue(prop);
     return value?.data ?? false;
+  }
+
+  function getIsAboutToDisappear(entry: ListEntry): boolean {
+    return getBooleanValue(entry, "formula.fnIsItemAboutToDisappear");
+  }
+
+  function getAreTargetsShown(entry: ListEntry): boolean {
+    return getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") || getBooleanValue(entry, "formula.fnzIsRecentlyModified");
+  }
+
+  function toggleTargetExpansion(entryPath: string) {
+    if (expandedEntries.has(entryPath)) {
+      expandedEntries.delete(entryPath);
+    } else {
+      expandedEntries.add(entryPath);
+    }
+    // Trigger reactivity
+    expandedEntries = expandedEntries;
   }
 </script>
 
@@ -374,30 +395,62 @@
         <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
       </div>
       <div class="target-container">
-        <div class="groups-row">
-          {#each groups as group}
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                checked={isGroupFullySelected(entry, group.value)}
-                on:change={() => handleGroupChange(entry, group.value)}
-              />
-              <span class="group-name">{group.label}</span>
-            </label>
-          {/each}
-        </div>
-        <div class="targets-row">
-          {#each targets as target}
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                checked={getTargetValue(entry, target)}
-                on:change={() => handleTargetChange(entry, target)}
-              />
-              <span>{target.label}</span>
-            </label>
-          {/each}
-        </div>
+        {#if getAreTargetsShown(entry)}
+          <div class="groups-row">
+            {#each groups as group}
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={isGroupFullySelected(entry, group.value)}
+                  on:change={() => handleGroupChange(entry, group.value)}
+                />
+                <span class="group-name">{group.label}</span>
+              </label>
+            {/each}
+          </div>
+          <div class="targets-row">
+            {#each targets as target}
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={getTargetValue(entry, target)}
+                  on:change={() => handleTargetChange(entry, target)}
+                />
+                <span>{target.label}</span>
+              </label>
+            {/each}
+          </div>
+        {:else}
+          {#if expandedEntries.has(entry.file.path)}
+            <div class="groups-row">
+              {#each groups as group}
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={isGroupFullySelected(entry, group.value)}
+                    on:change={() => handleGroupChange(entry, group.value)}
+                  />
+                  <span class="group-name">{group.label}</span>
+                </label>
+              {/each}
+            </div>
+            <div class="targets-row">
+              {#each targets as target}
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={getTargetValue(entry, target)}
+                    on:change={() => handleTargetChange(entry, target)}
+                  />
+                  <span>{target.label}</span>
+                </label>
+              {/each}
+            </div>
+          {/if}
+          <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry.file.path)}>
+            {expandedEntries.has(entry.file.path) ? "▼ Hide targets" : "▶ Targets already set"}
+          </button>
+        {/if}
       </div>
       {#if index < entryData.length - 1}
         <hr class="entry-separator" />
@@ -532,5 +585,26 @@
     margin: 1rem 0;
     border: none;
     border-top: 1px solid var(--background-modifier-border);
+  }
+
+  .toggle-targets-btn {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    margin-top: 0.5rem;
+  }
+
+  .toggle-targets-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+  }
+
+  .toggle-targets-btn:active {
+    transform: scale(0.98);
   }
 </style>
