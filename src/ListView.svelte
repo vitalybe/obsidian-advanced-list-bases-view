@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import { MarkdownRenderer, TFile, type App, type FrontMatterCache, type RenderContext } from "obsidian";
   import type { ListEntry, Config, PropertyData } from "./types";
 
@@ -49,10 +50,45 @@
     properties: PropertyData[];
   }> = [];
 
+  // Track active file changes and metadata updates
+  let activeFilePath = "";
+  let metadataVersion = 0;
+
   // Reactively process entries when they change
   $: {
     processEntries(entries, properties);
   }
+
+  // Set up event listeners for active file and metadata changes
+  onMount(() => {
+    if (!app) return;
+
+    const updateActiveFile = () => {
+      activeFilePath = app.workspace.activeEditor?.file?.path || "";
+      debugLog("Active file changed to:", activeFilePath);
+    };
+
+    const updateMetadata = (file: any) => {
+      // Only update if it's the active file
+      if (file.path === app.workspace.activeEditor?.file?.path) {
+        metadataVersion++;
+        debugLog("Metadata updated for active file, version:", metadataVersion);
+      }
+    };
+
+    // Initial update
+    updateActiveFile();
+
+    // Listen for changes
+    const fileRef = app.workspace.on("active-leaf-change", updateActiveFile);
+    const metadataRef = app.metadataCache.on("changed", updateMetadata);
+
+    // Cleanup
+    return () => {
+      app.workspace.offref(fileRef);
+      app.metadataCache.offref(metadataRef);
+    };
+  });
 
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
@@ -256,6 +292,7 @@
 
     const activeFileMetadata = getActiveFileMetadata();
     const targets = activeFileMetadata?.frontmatter[TARGETS_PROPERTY];
+    debugLog("getActiveFileTarget", targets);
     if (targets) {
       if (Array.isArray(targets)) {
         target = targets[0];
@@ -309,13 +346,13 @@
     });
   }
 
-  $: activeTarget = getActiveFileTarget();
-  $: activeTargetLabel = getActiveFileTargetLabel();
-  debugLog("activeTarget", activeTarget);
+  $: activeTarget = (activeFilePath || metadataVersion >= 0) && getActiveFileTarget();
+  $: activeTargetLabel = (activeFilePath || metadataVersion >= 0) && getActiveFileTargetLabel();
+  $: debugLog("activeTarget", activeTarget, "for file:", activeFilePath, "metadata v:", metadataVersion);
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
-<div class="bases-advanced-list-container" tabindex="0" role="region" aria-label="List view">
+<div class="list-container" tabindex="0" role="region" aria-label="List view">
   {#each entryData as { entry, properties: props }, index (entry.file.path)}
     <div class="entry">
       {#each props as propData (propData.prop)}
@@ -334,7 +371,7 @@
     <div class="actions-container">
       {#if activeTarget}
         <button class="btn-primary" on:click={() => handleWatch(entry)}>
-          Watch ({activeTarget})
+          Watch ({activeTargetLabel})
         </button>
         <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}> Mark as read </button>
       {/if}
@@ -370,11 +407,11 @@
 </div>
 
 <style>
-  .bases-advanced-list-container {
+  .list-container {
     padding: 1rem;
   }
 
-  .bases-advanced-list-container:focus {
+  .container:focus {
     outline: none;
   }
 
