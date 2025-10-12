@@ -298,11 +298,11 @@
     if (!activeTarget) return;
 
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+      const targets = (frontmatter[TARGETS_DONE_PROPERTY] as string[]) ?? [];
       if (!targets.includes(activeTarget)) {
         targets.push(activeTarget);
       }
-      frontmatter[TARGETS_PROPERTY] = targets;
+      frontmatter[TARGETS_DONE_PROPERTY] = targets;
     });
   }
 
@@ -317,7 +317,7 @@
 
   function handleDelete(entry: ListEntry) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      frontmatter[DELETE_PROPERTY] = true;
+      frontmatter["md_deleted"] = true;
     });
   }
 </script>
