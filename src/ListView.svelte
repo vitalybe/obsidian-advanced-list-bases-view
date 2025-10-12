@@ -313,7 +313,7 @@
     });
   }
 
-  function handleTargetSelect(event: Event) {
+  function handleFilterSelect(event: Event) {
     const select = event.target as HTMLSelectElement;
     const selectedTarget = select.value;
 
@@ -323,16 +323,16 @@
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
-        frontmatter[TARGETS_PROPERTY] = [];
+        frontmatter[TARGETS_PROPERTY] = null;
       } else {
         // Set the target as an array with the selected value
-        frontmatter[TARGETS_PROPERTY] = [selectedTarget];
+        frontmatter[TARGETS_PROPERTY] = selectedTarget;
       }
     });
   }
 
   function getIsAboutToDisappear(entry: ListEntry): boolean {
-    const value: {data: boolean} | undefined = entry.getValue("formula.fnzAboutToDisappear");
+    const value: { data: boolean } | undefined = entry.getValue("formula.fnIsItemAboutToDisappear");
     return value?.data ?? false;
   }
 </script>
@@ -341,7 +341,7 @@
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
   <div class="target-selector">
     <label for="active-target-select">Select your target:</label>
-    <select id="active-target-select" value={activeTarget || ""} on:change={handleTargetSelect}>
+    <select id="active-target-select" value={activeTarget || ""} on:change={handleFilterSelect}>
       <option value="">All</option>
       {#each targets as target}
         <option value={target.value}>{target.label}</option>
@@ -350,7 +350,7 @@
   </div>
 
   {#each entryData as { entry, properties: props }, index (entry.file.path)}
-    <div class="entry">
+    <div class="entry" style:opacity={getIsAboutToDisappear(entry) ? "0.5" : "1"}>
       {#each props as propData (propData.prop)}
         {#if propData.type === "template"}
           <div class="template" use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}></div>
@@ -363,44 +363,46 @@
           <div class="error">{propData.message}</div>
         {/if}
       {/each}
-    </div>
-    <div class="actions-container">
-      {#if activeTarget}
-        <button class="btn-primary" on:click={() => handleWatch(entry)}>
-          Watch ({activeTargetLabel})
-        </button>
-        <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}> Mark as read </button>
+      <div class="actions-container">
+        {#if activeTarget}
+          <button class="btn-primary" on:click={() => handleWatch(entry)}>
+            Watch ({activeTargetLabel})
+          </button>
+          <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}> Mark as read </button>
+        {/if}
+        <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
+        <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
+      </div>
+      <div class="target-container">
+        <div class="groups-row">
+          {#each groups as group}
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                checked={isGroupFullySelected(entry, group.value)}
+                on:change={() => handleGroupChange(entry, group.value)}
+              />
+              <span class="group-name">{group.label}</span>
+            </label>
+          {/each}
+        </div>
+        <div class="targets-row">
+          {#each targets as target}
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                checked={getTargetValue(entry, target)}
+                on:change={() => handleTargetChange(entry, target)}
+              />
+              <span>{target.label}</span>
+            </label>
+          {/each}
+        </div>
+      </div>
+      {#if index < entryData.length - 1}
+        <hr class="entry-separator" />
       {/if}
-      <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
-      <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
     </div>
-    <div>Modified {entry.getValue("formula.fnzModifiedAgoSeconds")} seconds ago</div>
-    <div>About to disappear {getIsAboutToDisappear(entry)}</div>
-    <div class="target-container">
-      <div class="groups-row">
-        {#each groups as group}
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              checked={isGroupFullySelected(entry, group.value)}
-              on:change={() => handleGroupChange(entry, group.value)}
-            />
-            <span class="group-name">{group.label}</span>
-          </label>
-        {/each}
-      </div>
-      <div class="targets-row">
-        {#each targets as target}
-          <label class="checkbox-label">
-            <input type="checkbox" checked={getTargetValue(entry, target)} on:change={() => handleTargetChange(entry, target)} />
-            <span>{target.label}</span>
-          </label>
-        {/each}
-      </div>
-    </div>
-    {#if index < entryData.length - 1}
-      <hr class="entry-separator" />
-    {/if}
   {/each}
 </div>
 
@@ -478,12 +480,6 @@
     font-size: 0.9rem;
     font-weight: 500;
     transition: opacity 0.2s;
-  }
-
-  .btn-primary,
-  .btn-regular,
-  .btn-destructive:hover {
-    opacity: 0.8;
   }
 
   .btn-primary {
