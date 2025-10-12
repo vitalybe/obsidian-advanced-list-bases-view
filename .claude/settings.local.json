@@ -5,7 +5,8 @@
       "WebFetch(domain:www.moritzjung.dev)",
       "WebFetch(domain:docs.obsidian.md)",
       "WebSearch",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

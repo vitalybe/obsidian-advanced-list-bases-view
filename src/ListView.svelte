@@ -330,6 +330,11 @@
       }
     });
   }
+
+  function getIsAboutToDisappear(entry: ListEntry): boolean {
+    const value: {data: boolean} | undefined = entry.getValue("formula.fnzAboutToDisappear");
+    return value?.data ?? false;
+  }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -369,9 +374,8 @@
       <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
       <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
     </div>
-    <div>
-      <span>Modified {entry.getValue("formula.fnzModifiedAgoSeconds")} seconds ago</span>
-    </div>
+    <div>Modified {entry.getValue("formula.fnzModifiedAgoSeconds")} seconds ago</div>
+    <div>About to disappear {getIsAboutToDisappear(entry)}</div>
     <div class="target-container">
       <div class="groups-row">
         {#each groups as group}
@@ -405,7 +409,7 @@
     padding: 1rem;
   }
 
-  .container:focus {
+  .list-container:focus {
     outline: none;
   }
 
