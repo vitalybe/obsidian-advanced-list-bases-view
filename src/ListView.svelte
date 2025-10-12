@@ -173,18 +173,6 @@
     return metadata;
   }
 
-  function handleTargetClick(entry: ListEntry) {
-    console.log("handleTargetClick", entry);
-    const activeFileMetadata = getActiveFileMetadata();
-    if (!activeFileMetadata) return;
-    const entryFile = entry.file;
-    const entryFileMetadata = app.metadataCache.getFileCache(entryFile);
-    app.fileManager.processFrontMatter(entryFile, (frontmatter) => {
-      frontmatter["md-targets"] = ["A", "B", "C"];
-      console.log(frontmatter);
-    });
-  }
-
   function renderPropertyValue(element: HTMLElement, value: any) {
     // Render property value when element is mounted
     if (value && renderContext) {
@@ -207,7 +195,6 @@
   }
 
   function getTargetValue(entry: ListEntry, target: { value: string; label: string; groups: GroupsEnum[] }): boolean {
-    debugLog("getTargetValue", entry, target);
     const entryFileMetadata = getEntryFileMetadata(entry);
     if (!entryFileMetadata) return false;
     const targets = entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
@@ -263,6 +250,68 @@
       frontmatter[TARGETS_PROPERTY] = targets;
     });
   }
+
+  function getActiveFileTarget(): string | undefined {
+    let target: string | undefined;
+
+    const activeFileMetadata = getActiveFileMetadata();
+    const targets = activeFileMetadata?.frontmatter[TARGETS_PROPERTY];
+    if (targets) {
+      if (Array.isArray(targets)) {
+        target = targets[0];
+      } else {
+        target = targets;
+      }
+    }
+
+    return target;
+  }
+
+  function getActiveFileTargetLabel(): string | null {
+    const targetValue = getActiveFileTarget();
+    if (!targetValue) return null;
+    const target = targets.find((t) => t.value === targetValue);
+    return target?.label || null;
+  }
+
+  function openRedditUrl(entry: ListEntry) {
+    const redditUrl = entry.getValue("reddit_url");
+    if (redditUrl) {
+      window.open(redditUrl.toString(), "_blank");
+    }
+  }
+
+  function addActiveTargetToEntry(entry: ListEntry) {
+    const activeTarget = getActiveFileTarget();
+    if (!activeTarget) return;
+
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+      if (!targets.includes(activeTarget)) {
+        targets.push(activeTarget);
+      }
+      frontmatter[TARGETS_PROPERTY] = targets;
+    });
+  }
+
+  function handleWatch(entry: ListEntry) {
+    openRedditUrl(entry);
+    addActiveTargetToEntry(entry);
+  }
+
+  function handleMarkAsRead(entry: ListEntry) {
+    addActiveTargetToEntry(entry);
+  }
+
+  function handleDelete(entry: ListEntry) {
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      frontmatter["md_deleted"] = true;
+    });
+  }
+
+  $: activeTarget = getActiveFileTarget();
+  $: activeTargetLabel = getActiveFileTargetLabel();
+  debugLog("activeTarget", activeTarget);
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -281,6 +330,16 @@
           <div class="error">{propData.message}</div>
         {/if}
       {/each}
+    </div>
+    <div class="actions-container">
+      {#if activeTarget}
+        <button class="btn-primary" on:click={() => handleWatch(entry)}>
+          Watch ({activeTarget})
+        </button>
+        <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}> Mark as read </button>
+      {/if}
+      <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
+      <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
     </div>
     <div class="target-container">
       <div class="groups-row">
@@ -336,6 +395,46 @@
   .error {
     color: var(--text-error);
     font-style: italic;
+  }
+
+  .actions-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary,
+  .btn-regular,
+  .btn-destructive {
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+
+  .btn-primary,
+  .btn-regular,
+  .btn-destructive:hover {
+    opacity: 0.8;
+  }
+
+  .btn-primary {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+  }
+
+  .btn-regular {
+    background-color: var(--background-modifier-border);
+    color: var(--text-normal);
+  }
+
+  .btn-destructive {
+    background-color: var(--text-error);
+    color: var(--text-on-accent);
   }
 
   .target-container {
