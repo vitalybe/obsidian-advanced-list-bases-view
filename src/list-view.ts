@@ -103,8 +103,3 @@ export class ListAdvancedView extends BasesView {
     return [];
   }
 }
-
-/** Wrapper for Object.hasOwn which performs type narrowing. */
-function hasOwnProperty<K extends PropertyKey>(o: unknown, v: K): o is Record<K, unknown> {
-  return o != null && typeof o === "object" && Object.hasOwn(o, v);
-}

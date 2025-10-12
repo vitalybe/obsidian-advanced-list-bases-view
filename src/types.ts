@@ -1,6 +1,6 @@
 import type { TFile } from "obsidian";
 
-export interface Entry {
+export interface ListEntry {
   getValue(prop: string): any;
   file: TFile;
 }

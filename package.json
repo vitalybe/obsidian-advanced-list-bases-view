@@ -4,7 +4,7 @@
   "description": "Advanced List Bases View",
   "main": "main.js",
   "scripts": {
-    "dev": "pnpm run build && watchman-make -p '**/*.ts' '**/*.tsx' --run 'pnpm run build'",
+    "dev": "pnpm run build && watchman-make -p '**/*.ts' '**/*.tsx' '**/*.svelte' --run 'pnpm run build'",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },

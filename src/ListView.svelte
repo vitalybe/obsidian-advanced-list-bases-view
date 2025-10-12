@@ -1,18 +1,49 @@
 <script lang="ts">
   import { MarkdownRenderer, TFile, type App, type RenderContext } from "obsidian";
-  import type { Entry, Config, PropertyData } from "./types";
+  import type { ListEntry, Config, PropertyData } from "./types";
 
   // Props with defaults to prevent undefined errors
-  export let entries: Entry[] = [];
+  export let entries: ListEntry[] = [];
   export let properties: string[] = [];
   export let config: Config | undefined = undefined;
-  export let app: App | undefined = undefined;
+  export let app: App;
   export let renderContext: RenderContext | undefined = undefined;
   export let component: any = undefined;
 
+  // option(Eli, Eli 👦🏻),
+  // option(Emily, Emily 👧🏽),
+  // option(Lia, Lia 👧🏼),
+  // option(Inga, Inga 👸🏻),
+  // option(Esty, Esty 🌸)
+  // option(Pub, Pub 🍺)
+  // option(Vitaly, Vitaly 👨🏻)
+
+  enum GroupsEnum {
+    KIDS = "Kids",
+    ANIMALS = "Animals",
+    ADULTS = "Adults",
+  }
+
+  const groups = [
+    { value: GroupsEnum.KIDS, label: "Kids" },
+    { value: GroupsEnum.ANIMALS, label: "Animals" },
+    { value: GroupsEnum.ADULTS, label: "Adults" },
+  ];
+
+  const targets = [
+    { value: "Eli", label: "Eli 👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Emily", label: "Emily 👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Lia", label: "Lia 👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Inga", label: "Inga 👸🏻", groups: [GroupsEnum.KIDS] },
+    { value: "Esty", label: "Esty 🌸", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
+    { value: "Vitaly", label: "Vitaly 👨🏻", groups: [GroupsEnum.ADULTS] },
+    { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
+  ];
+
   // Reactive data structure for entries
   let entryData: Array<{
-    entry: Entry;
+    entry: ListEntry;
     properties: PropertyData[];
   }> = [];
 
@@ -21,7 +52,7 @@
     processEntries(entries, properties);
   }
 
-  async function processEntries(entries: Entry[], properties: string[]) {
+  async function processEntries(entries: ListEntry[], properties: string[]) {
     const processed = await Promise.all(
       entries.map(async (entry) => {
         const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
@@ -34,7 +65,7 @@
     entryData = processed;
   }
 
-  async function processProperty(entry: Entry, prop: string): Promise<PropertyData | null> {
+  async function processProperty(entry: ListEntry, prop: string): Promise<PropertyData | null> {
     try {
       const value = entry.getValue(prop);
       if (!value) return null;
@@ -138,6 +169,26 @@
       },
     };
   }
+
+  function handleTargetClick(entry: ListEntry) {
+    console.log("handleTargetClick", entry);
+    const activeFile = app.workspace.activeEditor?.file;
+    const entryFile = entry.file;
+    const entryFileMetadata = app.metadataCache.getFileCache(entryFile);
+    app.fileManager.processFrontMatter(entryFile, (frontmatter) => {
+      frontmatter["md-targets"] = ["A", "B", "C"];
+      console.log(frontmatter);
+    });
+  }
+
+  // if (file) {
+  //   const metadata = app.metadataCache.getFileCache(file!);
+  //   const targets = metadata?.frontmatter["md-targets"] as string[];
+  //   if (targets) {
+  //     targets.push(entry.file.path);
+  //     metadata.frontmatter["md-targets"] = targets;
+  //   }
+  // }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -153,15 +204,15 @@
         {:else if propData.type === "property"}
           <div class="bases-list-property">
             <span class="bases-list-property-label">{propData.label}:</span>
-            <span
-              class="bases-list-property-value"
-              use:renderPropertyValue={propData.value}
-            ></span>
+            <span class="bases-list-property-value" use:renderPropertyValue={propData.value}></span>
           </div>
         {:else if propData.type === "error"}
           <div class="bases-list-error">{propData.message}</div>
         {/if}
       {/each}
+    </div>
+    <div class="bases-list-target-container">
+      <button class="bases-list-target-button" on:click={() => handleTargetClick(entry)}>Target</button>
     </div>
     {#if index < entryData.length - 1}
       <hr class="advanced-list-entry-separator" />
