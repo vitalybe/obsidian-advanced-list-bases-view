@@ -1,7 +1,7 @@
 {
+  "extends": "@tsconfig/svelte/tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
     "target": "ES6",
@@ -11,6 +11,7 @@
     "importHelpers": true,
     "isolatedModules": true,
     "strictNullChecks": true,
+    "types": ["svelte", "node"],
     "lib": [
       "DOM",
       "ES5",
@@ -20,6 +21,8 @@
     ]
   },
   "include": [
-    "**/*.ts"
-, "src/map-view.ts.backup"  ]
+    "**/*.ts",
+    "**/*.svelte",
+    "src/map-view.ts.backup"
+  ]
 }

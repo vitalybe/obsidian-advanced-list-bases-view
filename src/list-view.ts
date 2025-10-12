@@ -1,10 +1,12 @@
-import { BasesView, MarkdownRenderer, QueryController, TFile, ViewOption } from "obsidian";
+import { BasesView, QueryController } from "obsidian";
+import type { ViewOption } from "obsidian";
+import ListView from "./ListView.svelte";
 
 export const ListAdvancedType = "list-advanced";
 export class ListAdvancedView extends BasesView {
   type = ListAdvancedType;
-  scrollEl: HTMLElement;
   containerEl: HTMLElement;
+  private component?: ListView;
 
   private debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView] ${message}`, ...args);
@@ -12,12 +14,17 @@ export class ListAdvancedView extends BasesView {
 
   constructor(controller: QueryController, scrollEl: HTMLElement) {
     super(controller);
-    this.containerEl = scrollEl.createDiv({ cls: "bases-advanced-list-container is-loading", attr: { tabIndex: 0 } });
+    this.containerEl = scrollEl.createDiv({ cls: "is-loading", attr: { tabIndex: 0 } });
   }
 
   onload(): void {}
 
-  onunload() {}
+  onunload() {
+    if (this.component) {
+      this.component.$destroy();
+      this.component = undefined;
+    }
+  }
 
   onResize(): void {}
 
@@ -32,14 +39,6 @@ export class ListAdvancedView extends BasesView {
   }
 
   private async renderList(): Promise<void> {
-    // Save scroll position before clearing
-    const editor = this.app.workspace.activeEditor?.editor;
-    const scrollTop = editor?.getScrollInfo().top || 0;
-    this.debugLog("Saving scroll position", scrollTop);
-
-    // Clear existing content
-    this.containerEl.empty();
-
     if (!this.data || !this.data.data) {
       return;
     }
@@ -47,64 +46,23 @@ export class ListAdvancedView extends BasesView {
     const entries = this.data.data;
     const properties = this.config.getOrder() || [];
 
-    // Render each entry
-    for (let index = 0; index < entries.length; index++) {
-      const entry = entries[index];
-      const entryEl = this.containerEl.createDiv("bases-list-entry");
-
-      // Render each property
-      for (const prop of properties) {
-        try {
-          const value = entry.getValue(prop);
-          if (value) {
-            const valueStr = value.toString();
-
-            // Check if this is a dynamic template directive
-            if (valueStr.startsWith("!dynamic=")) {
-              const templatePath = valueStr.substring("!dynamic=".length);
-              const templateEl = entryEl.createDiv("bases-list-template");
-              const filePath = entry.file.path;
-
-              try {
-                // Read template file
-                const templateFile = this.app.vault.getAbstractFileByPath(templatePath);
-                if (templateFile && templateFile instanceof TFile) {
-                  const templateContent = await this.app.vault.read(templateFile);
-
-                  // Replace placeholder with actual file path
-                  const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
-
-                  await MarkdownRenderer.render(this.app, renderedContent, templateEl, filePath, this);
-                } else {
-                  templateEl.createEl("div", { text: `Template file not found: ${templatePath}` });
-                }
-              } catch (error) {
-                console.error(`Error rendering template for ${filePath}:`, error);
-                templateEl.createEl("div", { text: `Error: ${error.message}` });
-              }
-            } else if (valueStr.trim() !== "") {
-              const propLineEl = entryEl.createDiv("bases-list-property");
-              const labelEl = propLineEl.createSpan("bases-list-property-label");
-              labelEl.textContent = this.config.getDisplayName(prop) + ":";
-              // Render normal property
-              const valueEl = propLineEl.createSpan("bases-list-property-value");
-              value.renderTo(valueEl, this.app.renderContext);
-            }
-          }
-        } catch (error) {
-          console.error(`Error rendering property ${prop}:`, error);
-        }
-      }
-
-      // Add horizontal rule between entries (but not after the last one)
-      if (index < entries.length - 1) {
-        this.containerEl.createEl("hr", { cls: "advanced-list-entry-separator" });
-      }
+    // Destroy existing component if it exists
+    if (this.component) {
+      this.component.$destroy();
     }
 
-    // Restore scroll position after rendering
-    this.debugLog("Restoring scroll position", scrollTop);
-    editor?.scrollTo(null, scrollTop);
+    // Create new Svelte component instance
+    this.component = new ListView({
+      target: this.containerEl,
+      props: {
+        entries,
+        properties,
+        config: this.config,
+        app: this.app,
+        renderContext: this.app.renderContext,
+        component: this,
+      },
+    });
   }
 
   static getViewOptions(): ViewOption[] {

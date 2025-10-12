@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(pnpm run:*)",
-      "WebFetch(domain:www.moritzjung.dev)"
+      "WebFetch(domain:www.moritzjung.dev)",
+      "WebFetch(domain:docs.obsidian.md)",
+      "WebSearch",
+      "Bash(pnpm add:*)"
     ],
     "deny": [],
     "ask": []
