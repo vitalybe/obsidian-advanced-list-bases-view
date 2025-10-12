@@ -1,6 +1,6 @@
 {
   "name": "obsidian-advanced-list-bases-view",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Advanced List Bases View",
   "main": "main.js",
   "scripts": {
