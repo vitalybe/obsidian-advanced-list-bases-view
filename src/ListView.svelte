@@ -323,7 +323,7 @@
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
-        delete frontmatter[TARGETS_PROPERTY];
+        frontmatter[TARGETS_PROPERTY] = [];
       } else {
         // Set the target as an array with the selected value
         frontmatter[TARGETS_PROPERTY] = [selectedTarget];
