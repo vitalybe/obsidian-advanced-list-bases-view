@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import { MarkdownRenderer, TFile, type App, type FrontMatterCache, type RenderContext } from "obsidian";
   import type { ListEntry, Config, PropertyData } from "./types";
 
@@ -43,6 +42,7 @@
 
   const TARGETS_PROPERTY = "md-targets";
   const TARGETS_DONE_PROPERTY = "md-targets-done";
+  const DELETE_PROPERTY = "md-deleted";
 
   // Reactive data structure for entries
   let entryData: Array<{
@@ -50,51 +50,21 @@
     properties: PropertyData[];
   }> = [];
 
-  // Track active file changes and metadata updates
-  let activeFilePath = "";
-  let metadataVersion = 0;
+  // Track active target
+  let activeTarget: string | undefined;
+  let activeTargetLabel: string | null;
 
   // Reactively process entries when they change
   $: {
     processEntries(entries, properties);
   }
 
-  // Set up event listeners for active file and metadata changes
-  onMount(() => {
-    if (!app) return;
-
-    const updateActiveFile = () => {
-      activeFilePath = app.workspace.activeEditor?.file?.path || "";
-      debugLog("Active file changed to:", activeFilePath);
-    };
-
-    const updateMetadata = (file: any) => {
-      // Only update if it's the active file
-      if (file.path === app.workspace.activeEditor?.file?.path) {
-        metadataVersion++;
-        debugLog("Metadata updated for active file, version:", metadataVersion);
-      }
-    };
-
-    // Initial update
-    updateActiveFile();
-
-    // Listen for changes
-    const fileRef = app.workspace.on("active-leaf-change", updateActiveFile);
-    const metadataRef = app.metadataCache.on("changed", updateMetadata);
-
-    // Cleanup
-    return () => {
-      app.workspace.offref(fileRef);
-      app.metadataCache.offref(metadataRef);
-    };
-  });
-
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
   }
 
   async function processEntries(entries: ListEntry[], properties: string[]) {
+    debugLog("processEntries");
     const processed = await Promise.all(
       entries.map(async (entry) => {
         const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
@@ -105,6 +75,11 @@
       })
     );
     entryData = processed;
+
+    // Update active target info
+    activeTarget = getActiveFileTarget();
+    activeTargetLabel = getActiveFileTargetLabel();
+    debugLog("Updated activeTarget:", activeTarget, activeTargetLabel);
   }
 
   async function processProperty(entry: ListEntry, prop: string): Promise<PropertyData | null> {
@@ -342,13 +317,9 @@
 
   function handleDelete(entry: ListEntry) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      frontmatter["md_deleted"] = true;
+      frontmatter[DELETE_PROPERTY] = true;
     });
   }
-
-  $: activeTarget = (activeFilePath || metadataVersion >= 0) && getActiveFileTarget();
-  $: activeTargetLabel = (activeFilePath || metadataVersion >= 0) && getActiveFileTargetLabel();
-  $: debugLog("activeTarget", activeTarget, "for file:", activeFilePath, "metadata v:", metadataVersion);
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
