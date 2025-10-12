@@ -19,10 +19,12 @@ export class ListAdvancedView extends BasesView {
 
   onload(): void {
     // Create Svelte component once on load
+    this.debugLog("onload");
     this.initializeComponent();
   }
 
   onunload() {
+    this.debugLog("onunload");
     // Only destroy on unload
     if (this.component) {
       this.component.$destroy();

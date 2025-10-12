@@ -34,11 +34,10 @@
     { value: "Eli", label: "Eli 👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
     { value: "Emily", label: "Emily 👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
     { value: "Lia", label: "Lia 👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Inga", label: "Inga 👸🏻", groups: [GroupsEnum.KIDS] },
-    { value: "Esty", label: "Esty 🌸", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Inga", label: "Inga 👸🏻", groups: [GroupsEnum.ADULTS] },
+    { value: "Esty", label: "Esty 🌸", groups: [GroupsEnum.ADULTS, GroupsEnum.ANIMALS] },
     { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
     { value: "Vitaly", label: "Vitaly 👨🏻", groups: [GroupsEnum.ADULTS] },
-    { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
   ];
 
   const TARGETS_PROPERTY = "md-targets";
@@ -219,7 +218,48 @@
     debugLog("handleTargetChange", entry, target);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
-      targets.push(target.value);
+      const index = targets.indexOf(target.value);
+      if (index > -1) {
+        // Remove if already present
+        targets.splice(index, 1);
+      } else {
+        // Add if not present
+        targets.push(target.value);
+      }
+      frontmatter[TARGETS_PROPERTY] = targets;
+    });
+  }
+
+  function getGroupMembers(group: GroupsEnum) {
+    return targets.filter((target) => target.groups.includes(group));
+  }
+
+  function isGroupFullySelected(entry: ListEntry, group: GroupsEnum): boolean {
+    const members = getGroupMembers(group);
+    if (members.length === 0) return false;
+    return members.every((member) => getTargetValue(entry, member));
+  }
+
+  function handleGroupChange(entry: ListEntry, group: GroupsEnum) {
+    debugLog("handleGroupChange", entry, group);
+    const members = getGroupMembers(group);
+    const isFullySelected = isGroupFullySelected(entry, group);
+
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      let targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+
+      if (isFullySelected) {
+        // Remove all members of this group
+        targets = targets.filter((t) => !members.some((m) => m.value === t));
+      } else {
+        // Add all members of this group
+        members.forEach((member) => {
+          if (!targets.includes(member.value)) {
+            targets.push(member.value);
+          }
+        });
+      }
+
       frontmatter[TARGETS_PROPERTY] = targets;
     });
   }
@@ -243,17 +283,26 @@
       {/each}
     </div>
     <div class="target-container">
-      {#each targets as target}
-        <div class="target">
-          <input
-            type="checkbox"
-            class="target-checkbox"
-            checked={getTargetValue(entry, target)}
-            on:change={() => handleTargetChange(entry, target)}
-          />
-          <span class="target-label">{target.label}</span>
-        </div>
-      {/each}
+      <div class="groups-row">
+        {#each groups as group}
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              checked={isGroupFullySelected(entry, group.value)}
+              on:change={() => handleGroupChange(entry, group.value)}
+            />
+            <span class="group-name">{group.label}</span>
+          </label>
+        {/each}
+      </div>
+      <div class="targets-row">
+        {#each targets as target}
+          <label class="checkbox-label">
+            <input type="checkbox" checked={getTargetValue(entry, target)} on:change={() => handleTargetChange(entry, target)} />
+            <span>{target.label}</span>
+          </label>
+        {/each}
+      </div>
     </div>
     {#if index < entryData.length - 1}
       <hr class="entry-separator" />
@@ -291,8 +340,33 @@
 
   .target-container {
     display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .groups-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .targets-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .checkbox-label {
+    display: inline-flex;
+    align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.25rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .group-name {
+    font-weight: 600;
   }
 
   .entry-separator {
