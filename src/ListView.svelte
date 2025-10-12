@@ -369,6 +369,9 @@
       <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
       <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
     </div>
+    <div>
+      <span>Modified {entry.getValue("formula.fnzModifiedAgoSeconds")} seconds ago</span>
+    </div>
     <div class="target-container">
       <div class="groups-row">
         {#each groups as group}
