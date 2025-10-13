@@ -398,7 +398,7 @@
           <div class="template" use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}></div>
         {:else if propData.type === "property"}
           <div class="property">
-            <span class="property-label">{propData.label}:</span>
+            <span class="property-label">{propData.label}</span>
             <span class="property-value" use:renderPropertyValue={propData.value}></span>
           </div>
         {:else if propData.type === "error"}
@@ -489,16 +489,19 @@
 
   .entry {
     margin-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .property {
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
     margin-bottom: 0.25rem;
   }
 
   .property-label {
-    font-weight: 500;
+    font-weight: bold;
   }
 
   .error {
