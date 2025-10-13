@@ -47,7 +47,7 @@
   let activeTargetLabel: string | null;
 
   // Track expanded entries (those with collapsed targets)
-  let expandedEntries = new Set<string>();
+  let entriesExpansionState = new Map<string, boolean>();
 
   // Reactively process entries when they change
   $: {
@@ -233,7 +233,7 @@
     return members.every((member) => getTargetValue(entry, member));
   }
 
-  function handleGroupChange(entry: ListEntry, group: GroupsEnum) {
+  function handleGroupClick(entry: ListEntry, group: GroupsEnum) {
     debugLog("handleGroupChange", entry, group);
     const members = getGroupMembers(group);
     const isFullySelected = isGroupFullySelected(entry, group);
@@ -344,17 +344,38 @@
   }
 
   function getAreTargetsShown(entry: ListEntry): boolean {
-    return getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") || getBooleanValue(entry, "formula.fnzIsRecentlyModified");
+    const forcedExpansionState = entriesExpansionState.get(entry.file.path);
+    if (forcedExpansionState !== undefined) {
+      return forcedExpansionState;
+    } else {
+      const areTargetsEmpty = getBooleanValue(entry, "formula.fnzTargetsEmptyTargets");
+      const isRecentlyModified = getBooleanValue(entry, "formula.fnzIsRecentlyModified");
+      return areTargetsEmpty || isRecentlyModified;
+    }
   }
 
-  function toggleTargetExpansion(entryPath: string) {
-    if (expandedEntries.has(entryPath)) {
-      expandedEntries.delete(entryPath);
+  function toggleTargetExpansion(entry: ListEntry) {
+    const entryPath = entry.file.path;
+    const isCurrentlyShown = getAreTargetsShown(entry);
+    if (isCurrentlyShown) {
+      debugLog("toggleTargetExpansion", entry, "hiding targets");
+      entriesExpansionState.set(entryPath, false);
     } else {
-      expandedEntries.add(entryPath);
+      debugLog("toggleTargetExpansion", entry, "showing targets");
+      entriesExpansionState.set(entryPath, true);
     }
     // Trigger reactivity
-    expandedEntries = expandedEntries;
+    entriesExpansionState = entriesExpansionState;
+  }
+
+  function getGroupCheckboxIconClass(entry: ListEntry, group: GroupsEnum): string {
+    let className = "";
+    if (isGroupFullySelected(entry, group)) {
+      className = "checkbox-icon-checked";
+    } else if (getGroupMembers(group).some((member) => getTargetValue(entry, member))) {
+      className = "checkbox-icon-partially-checked";
+    }
+    return className;
   }
 </script>
 
@@ -395,17 +416,13 @@
         <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
       </div>
       <div class="target-container">
-        {#if getAreTargetsShown(entry)}
+        {#if entriesExpansionState && getAreTargetsShown(entry)}
           <div class="groups-row">
             {#each groups as group}
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={isGroupFullySelected(entry, group.value)}
-                  on:change={() => handleGroupChange(entry, group.value)}
-                />
-                <span class="group-name">{group.label}</span>
-              </label>
+              <button class="btn-regular" on:click={() => handleGroupClick(entry, group.value)}>
+                <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}" />
+                <span>{group.label}</span>
+              </button>
             {/each}
           </div>
           <div class="targets-row">
@@ -420,37 +437,10 @@
               </label>
             {/each}
           </div>
-        {:else}
-          {#if expandedEntries.has(entry.file.path)}
-            <div class="groups-row">
-              {#each groups as group}
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={isGroupFullySelected(entry, group.value)}
-                    on:change={() => handleGroupChange(entry, group.value)}
-                  />
-                  <span class="group-name">{group.label}</span>
-                </label>
-              {/each}
-            </div>
-            <div class="targets-row">
-              {#each targets as target}
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={getTargetValue(entry, target)}
-                    on:change={() => handleTargetChange(entry, target)}
-                  />
-                  <span>{target.label}</span>
-                </label>
-              {/each}
-            </div>
-          {/if}
-          <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry.file.path)}>
-            {expandedEntries.has(entry.file.path) ? "▼ Hide targets" : "▶ Targets already set"}
-          </button>
         {/if}
+        <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry)}>
+          {entriesExpansionState && getAreTargetsShown(entry) ? "▲ Hide targets" : "▼ Show targets"}
+        </button>
       </div>
       {#if index < entryData.length - 1}
         <hr class="entry-separator" />
@@ -533,6 +523,9 @@
     font-size: 0.9rem;
     font-weight: 500;
     transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .btn-primary {
@@ -606,5 +599,24 @@
 
   .toggle-targets-btn:active {
     transform: scale(0.98);
+  }
+
+  .checkbox-icon {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+  }
+
+  .checkbox-icon-checked::before {
+    content: "🟢";
+    color: var(--text-on-accent);
+  }
+
+  .checkbox-icon-partially-checked {
+    background-color: var(--background-modifier-border);
+  }
+
+  .checkbox-icon-partially-checked::before {
+    content: "🟡";
+    color: var(--text-normal);
   }
 </style>
