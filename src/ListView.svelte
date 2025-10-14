@@ -32,9 +32,9 @@
     { value: "Vitaly", label: "Vitaly 👨🏻", groups: [GroupsEnum.ADULTS] },
   ];
 
-  const TARGETS_PROPERTY = "md-targets";
-  const TARGETS_DONE_PROPERTY = "md-targets-done";
-  const DELETE_PROPERTY = "md-deleted";
+  const TARGETS_PROPERTY = "md_targets";
+  const TARGETS_DONE_PROPERTY = "md_targets_done";
+  const IS_DONE_PROPERTY = "md_is_done";
 
   // Reactive data structure for entries
   let entryData: Array<{
@@ -310,9 +310,9 @@
     addActiveTargetToEntry(entry);
   }
 
-  function handleDelete(entry: ListEntry) {
+  function handleRemove(entry: ListEntry) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      frontmatter[DELETE_PROPERTY] = true;
+      frontmatter[IS_DONE_PROPERTY] = true;
     });
   }
 
@@ -410,10 +410,10 @@
           <button class="btn-primary" on:click={() => handleWatch(entry)}>
             Watch ({activeTargetLabel})
           </button>
-          <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}> Mark as read </button>
+          <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}>Mark Read ({activeTargetLabel})</button>
         {/if}
         <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
-        <button class="btn-destructive" on:click={() => handleDelete(entry)}> Delete </button>
+        <button class="btn-destructive" on:click={() => handleRemove(entry)}>Remove</button>
       </div>
       <div class="target-container">
         {#if entriesExpansionState && getAreTargetsShown(entry)}
