@@ -339,10 +339,6 @@
     return value?.data ?? false;
   }
 
-  function getIsAboutToDisappear(entry: ListEntry): boolean {
-    return getBooleanValue(entry, "formula.fnIsItemAboutToDisappear");
-  }
-
   function getAreTargetsShown(entry: ListEntry): boolean {
     const forcedExpansionState = entriesExpansionState.get(entry.file.path);
     if (forcedExpansionState !== undefined) {
@@ -377,6 +373,13 @@
     }
     return className;
   }
+
+  function getEntryClasses(entry: ListEntry): string {
+    return [
+      getBooleanValue(entry, "formula.fnIsItemAboutToDisappear") ? "entry-about-to-disappear" : "",
+      getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
+    ].join(" ");
+  }
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -392,7 +395,7 @@
   </div>
 
   {#each entryData as { entry, properties: props }, index (entry.file.path)}
-    <div class="entry" style:opacity={getIsAboutToDisappear(entry) ? "0.5" : "1"}>
+    <div class="entry {getEntryClasses(entry)}">
       {#each props as propData (propData.prop)}
         {#if propData.type === "template"}
           <div class="template" use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}></div>
@@ -492,6 +495,21 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .entry-separator {
+    margin: 1rem 0;
+    border: none;
+    border-top: 1px solid var(--background-modifier-border);
+  }
+
+  .entry-about-to-disappear {
+    opacity: 0.5;
+  }
+
+  .entry-targets-empty {
+    background-color: hsla(2, 88%, 59%, 0.2);
   }
 
   .property {
@@ -575,12 +593,6 @@
 
   .group-name {
     font-weight: 600;
-  }
-
-  .entry-separator {
-    margin: 1rem 0;
-    border: none;
-    border-top: 1px solid var(--background-modifier-border);
   }
 
   .toggle-targets-btn {
