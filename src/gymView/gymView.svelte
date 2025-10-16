@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { DateTime } from "luxon";
   import {
     BasesViewConfig,
     MarkdownRenderer,
@@ -42,6 +44,10 @@
   let selectedValues: Map<string, string> = new Map();
   let customValues: Map<string, string> = new Map();
   let todayFileExists = false;
+  let lastExerciseDate: DateTime | null = null;
+  let currentTime = DateTime.now();
+  let timerInterval: number | null = null;
+  let expandedExercise: string | null = null;
 
   // Reactively process entries when they change
   $: {
@@ -53,8 +59,39 @@
     checkTodayFileExists();
   }
 
+  // Check if timer should be shown (within last 2 minutes)
+  $: showTimer = lastExerciseDate && currentTime.diff(lastExerciseDate, "minutes").minutes < 2;
+
+  // Calculate elapsed time string
+  $: elapsedTime = lastExerciseDate ? formatElapsedTime(currentTime.diff(lastExerciseDate).as("milliseconds")) : "";
+
+  onMount(() => {
+    // Update current time every second
+    timerInterval = window.setInterval(() => {
+      currentTime = DateTime.now();
+    }, 1000);
+  });
+
+  onDestroy(() => {
+    if (timerInterval !== null) {
+      clearInterval(timerInterval);
+    }
+  });
+
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[GymView ListView.svelte] ${message}`, ...args);
+  }
+
+  function formatElapsedTime(milliseconds: number): string {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${remainingSeconds}s`;
+    }
   }
 
   function sanitizeValue(value: string | number): number {
@@ -144,6 +181,16 @@
 
     // Get the first entry (the current one we're editing)
     const firstEntry = entries[0];
+
+    // Extract last_exercise_date from first entry
+    const metadata = getEntryFileMetadata(firstEntry);
+    if (metadata?.frontmatter?.last_exercise_date) {
+      const dateStr = metadata.frontmatter.last_exercise_date;
+      lastExerciseDate = DateTime.fromISO(dateStr);
+      debugLog("Last exercise date:", lastExerciseDate.toISO());
+    } else {
+      lastExerciseDate = null;
+    }
 
     // Aggregate exercise history from all entries
     debugLog("Aggregating exercise history from entries: ", entries.map((e) => e.file.name).join(", "));
@@ -390,18 +437,12 @@
       }
       // Sanitize and convert to number if possible
       const sanitized = sanitizeValue(valueToAdd);
-      values.push(sanitized);
+      values.push(sanitized.toString());
       frontmatter[exercise.prop] = values;
 
       // Update last_exercise_date with current ISO datetime
-      frontmatter["last_exercise_date"] = new Date().toISOString();
+      frontmatter["last_exercise_date"] = DateTime.now().toISO();
     });
-
-    // Clear the input after adding
-    customValues.set(exercise.prop, "");
-    selectedValues.set(exercise.prop, "");
-    customValues = customValues;
-    selectedValues = selectedValues;
   }
 
   function handleRadioChange(exerciseName: string, value: string) {
@@ -416,6 +457,19 @@
     // Clear radio selection when custom value is entered
     selectedValues.set(exerciseName, "");
     selectedValues = selectedValues;
+  }
+
+  function toggleExercise(exerciseProp: string) {
+    debugLog("toggleExercise", exerciseProp);
+    if (expandedExercise === exerciseProp) {
+      expandedExercise = null;
+    } else {
+      expandedExercise = exerciseProp;
+    }
+  }
+
+  function isExerciseExpanded(expandedExercise: string | null, exerciseProp: string): boolean {
+    return expandedExercise === exerciseProp;
   }
 </script>
 
@@ -435,74 +489,96 @@
     {#each propertyDisplays as display (display.prop)}
       {#if display.type === "exercise" && display.exerciseData}
         <!-- Exercise form for List-type properties -->
-        <div class="exercise-card">
-          <h3 class="exercise-name">{display.exerciseData.label}</h3>
-
-          <!-- Current values with remove buttons -->
-          <div class="current-values">
-            <span class="section-label">Current values:</span>
-            {#if display.exerciseData.currentValues.length > 0}
-              <div class="values-list">
-                {#each display.exerciseData.currentValues as value, index}
-                  <div class="value-item">
-                    <span class="value-text">{value}</span>
-                    <button
-                      class="btn-remove"
-                      on:click={() => handleRemoveValue(display.exerciseData, index)}
-                      title="Remove this value"
-                    >
-                      ×
-                    </button>
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <p class="empty-text">No values recorded yet</p>
-            {/if}
+        <div class="exercise-card" class:collapsed={!isExerciseExpanded(expandedExercise, display.exerciseData.prop)}>
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div
+            class="exercise-header"
+            on:click={() => (display.exerciseData ? toggleExercise(display.exerciseData.prop) : undefined)}
+            role="button"
+            tabindex="0"
+          >
+            <h3 class="exercise-name">
+              <span class="exercise-title">
+                {display.exerciseData.label}
+                {#if !isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
+                  <span class="sets-count">({display.exerciseData.currentValues.length} sets)</span>
+                {/if}
+              </span>
+              {#if showTimer && isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
+                <span class="timer">{elapsedTime}</span>
+              {/if}
+            </h3>
+            <span class="accordion-icon">{isExerciseExpanded(expandedExercise, display.exerciseData.prop) ? "▼" : "▶"}</span>
           </div>
 
-          <!-- Recent options as radio buttons -->
-          {#if display.exerciseData.recentOptions.length > 0}
-            <div class="recent-options">
-              <span class="section-label">Recent values:</span>
-              <div class="radio-group">
-                {#each display.exerciseData.recentOptions as option}
-                  <label class="radio-label">
-                    <input
-                      type="radio"
-                      name={`exercise-${display.exerciseData.prop}`}
-                      value={option}
-                      checked={selectedValues.get(display.exerciseData.prop) === option.toString()}
-                      on:change={() =>
-                        display.exerciseData ? handleRadioChange(display.exerciseData.prop, option.toString()) : undefined}
-                    />
-                    <span>{option}</span>
-                  </label>
-                {/each}
+          {#if isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
+            <!-- Current values with remove buttons -->
+            <div class="current-values">
+              <span class="section-label">Current values:</span>
+              {#if display.exerciseData.currentValues.length > 0}
+                <div class="values-list">
+                  {#each display.exerciseData.currentValues as value, index}
+                    <div class="value-item">
+                      <span class="value-text">{value}</span>
+                      <button
+                        class="btn-remove"
+                        on:click={() => handleRemoveValue(display.exerciseData, index)}
+                        title="Remove this value"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="empty-text">No values recorded yet</p>
+              {/if}
+            </div>
+
+            <!-- Recent options as radio buttons -->
+            {#if display.exerciseData.recentOptions.length > 0}
+              <div class="recent-options">
+                <span class="section-label">Recent values:</span>
+                <div class="radio-group">
+                  {#each display.exerciseData.recentOptions as option}
+                    <label class="radio-label">
+                      <input
+                        type="radio"
+                        name={`exercise-${display.exerciseData.prop}`}
+                        value={option}
+                        checked={selectedValues.get(display.exerciseData.prop) === option.toString()}
+                        on:change={() =>
+                          display.exerciseData ? handleRadioChange(display.exerciseData.prop, option.toString()) : undefined}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <!-- Custom value input -->
+            <div class="custom-input">
+              <span class="section-label">New value:</span>
+              <div class="input-row">
+                <input
+                  type="text"
+                  class="text-input"
+                  placeholder="Enter new value..."
+                  value={customValues.get(display.exerciseData.prop) || ""}
+                  on:input={(e) =>
+                    display.exerciseData ? handleCustomValueChange(display.exerciseData.prop, e.currentTarget.value) : undefined}
+                />
+                <button
+                  class="btn-submit"
+                  on:click={() => (display.exerciseData ? handleAddValue(display.exerciseData) : undefined)}
+                >
+                  Submit
+                </button>
               </div>
             </div>
           {/if}
-
-          <!-- Custom value input -->
-          <div class="custom-input">
-            <span class="section-label">New value:</span>
-            <div class="input-row">
-              <input
-                type="text"
-                class="text-input"
-                placeholder="Enter new value..."
-                value={customValues.get(display.exerciseData.prop) || ""}
-                on:input={(e) =>
-                  display.exerciseData ? handleCustomValueChange(display.exerciseData.prop, e.currentTarget.value) : undefined}
-              />
-              <button
-                class="btn-submit"
-                on:click={() => (display.exerciseData ? handleAddValue(display.exerciseData) : undefined)}
-              >
-                Submit
-              </button>
-            </div>
-          </div>
         </div>
       {:else if display.type === "property" && display.propertyData}
         <!-- Regular property display (non-List types) -->
@@ -605,20 +681,74 @@
   }
 
   .exercise-card {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     background-color: var(--background-primary);
+    transition: all 0.2s ease;
+  }
+
+  .exercise-card.collapsed {
+    padding: 0.75rem 1rem;
+  }
+
+  .exercise-header {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+
+  .exercise-header:hover {
+    opacity: 0.8;
   }
 
   .exercise-name {
-    margin: 0 0 1rem 0;
+    margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text-normal);
-    border-bottom: 2px solid var(--interactive-accent);
     padding-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex: 1;
+    border-bottom: none;
+  }
+
+  .exercise-card:not(.collapsed) .exercise-name {
+    border-bottom: 2px solid var(--interactive-accent);
+    margin-bottom: 1rem;
+  }
+
+  .exercise-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sets-count {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  .accordion-icon {
+    font-size: 1rem;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+
+  .timer {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-accent);
+    background-color: var(--background-modifier-border);
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-family: var(--font-monospace);
   }
 
   .section-label {
