@@ -1,14 +1,14 @@
 import { Plugin, TFile } from "obsidian";
-import { ListAdvancedView } from "./list-view";
+import { TargetsView, TargetsViewType } from "./targetView/targetView";
 
 export default class ObsidianAdvancedListPlugin extends Plugin {
   async onload() {
     console.log("onload");
-    this.registerBasesView("list-advanced", {
-      name: "List Advanced",
-      icon: "lucide-scroll-text",
-      factory: (controller, containerEl) => new ListAdvancedView(controller, containerEl),
-      options: ListAdvancedView.getViewOptions,
+    this.registerBasesView(TargetsViewType, {
+      name: "Targets",
+      icon: "lucide-target",
+      factory: (controller, containerEl) => new TargetsView(controller, containerEl),
+      options: TargetsView.getViewOptions,
     });
   }
 

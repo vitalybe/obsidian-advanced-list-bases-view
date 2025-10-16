@@ -1,10 +1,10 @@
 import { BasesView, QueryController } from "obsidian";
 import type { ViewOption } from "obsidian";
-import ListView from "./ListView.svelte";
+import ListView from "./targetView.svelte";
 
-export const ListAdvancedType = "list-advanced";
-export class ListAdvancedView extends BasesView {
-  type = ListAdvancedType;
+export const TargetsViewType = "targets-view";
+export class TargetsView extends BasesView {
+  type = TargetsViewType;
   containerEl: HTMLElement;
   private component?: ListView;
 

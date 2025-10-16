@@ -1,6 +1,6 @@
 <script lang="ts">
   import { MarkdownRenderer, TFile, type App, type FrontMatterCache, type RenderContext } from "obsidian";
-  import type { ListEntry, Config, PropertyData } from "./types";
+  import type { ListEntry, Config, PropertyData } from "../types";
 
   // Props with defaults to prevent undefined errors
   export let entries: ListEntry[] = [];
