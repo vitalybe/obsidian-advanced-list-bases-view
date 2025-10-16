@@ -392,7 +392,16 @@
       const sanitized = sanitizeValue(valueToAdd);
       values.push(sanitized);
       frontmatter[exercise.prop] = values;
+
+      // Update last_exercise_date with current ISO datetime
+      frontmatter["last_exercise_date"] = new Date().toISOString();
     });
+
+    // Clear the input after adding
+    customValues.set(exercise.prop, "");
+    selectedValues.set(exercise.prop, "");
+    customValues = customValues;
+    selectedValues = selectedValues;
   }
 
   function handleRadioChange(exerciseName: string, value: string) {
