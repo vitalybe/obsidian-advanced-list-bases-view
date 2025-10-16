@@ -12,6 +12,7 @@
     ListValue,
   } from "obsidian";
   import type { PropertyData } from "../types";
+  import { debug } from "console";
 
   // Props with defaults to prevent undefined errors
   export let entries: BasesEntry[] = [];
@@ -40,19 +41,88 @@
   let propertyDisplays: PropertyDisplay[] = [];
   let selectedValues: Map<string, string> = new Map();
   let customValues: Map<string, string> = new Map();
+  let todayFileExists = false;
 
   // Reactively process entries when they change
   $: {
     processEntries(entries, properties);
   }
 
+  // Reactively check if today's file exists
+  $: {
+    checkTodayFileExists();
+  }
+
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[GymView ListView.svelte] ${message}`, ...args);
   }
 
-  function sanitizeValue(value: string): number {
+  function sanitizeValue(value: string | number): number {
+    if (typeof value === "number") return value;
+    // Remove any non-numeric characters (except for decimal point and minus sign)
     return parseFloat(value.replace(/[^\d.-]/g, ""));
   }
+
+  function formatDateForButton(date: Date): string {
+    // Format as DD-MMM-YYYY (e.g., "16-Oct-2025")
+    const day = date.getDate().toString().padStart(2, "0");
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+
+  function formatDateForFilename(date: Date): string {
+    // Format as YYYY-MM-DD (e.g., "2025-10-16")
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function checkTodayFileExists() {
+    if (!app) return;
+
+    const today = new Date();
+    const filename = formatDateForFilename(today);
+    const filepath = `Gym/data/${filename}.md`;
+
+    const existingFile = app.vault.getAbstractFileByPath(filepath);
+    todayFileExists = existingFile !== null;
+    debugLog("Today's file exists:", todayFileExists);
+  }
+
+  async function handleCreateNewExercise() {
+    const today = new Date();
+    const filename = formatDateForFilename(today);
+    const filepath = `Gym/data/${filename}.md`;
+
+    debugLog("Creating new exercise file:", filepath);
+
+    try {
+      // Check if file already exists
+      const existingFile = app.vault.getAbstractFileByPath(filepath);
+      if (existingFile) {
+        debugLog("File already exists:", filepath);
+        // Open the existing file
+        const leaf = app.workspace.getLeaf(false);
+        await leaf.openFile(existingFile as TFile);
+        return;
+      }
+
+      // Create the file
+      await app.vault.create(filepath, "---\n---\n");
+      debugLog("Created new file:", filepath);
+
+      // Update the file exists state
+      todayFileExists = true;
+    } catch (error) {
+      console.error("Error creating exercise file:", error);
+    }
+  }
+
+  const today = new Date();
+  const buttonLabel = `New exercise for ${formatDateForButton(today)}`;
 
   function getValues(listValue: ListValue): number[] {
     const listLength = listValue.length();
@@ -76,6 +146,7 @@
     const firstEntry = entries[0];
 
     // Aggregate exercise history from all entries
+    debugLog("Aggregating exercise history from entries: ", entries.map((e) => e.file.name).join(", "));
     const exerciseHistory = aggregateExerciseHistory(entries);
 
     // Process each property in order
@@ -87,10 +158,10 @@
       if (!value) continue;
 
       // Check if this is a List type (array)
-      if (value instanceof ListValue) {
+      const propParsed = parsePropertyId(prop);
+      if (propParsed.type === "note") {
         // Render as exercise form
-        const currentValues = getValues(value);
-        const propParsed = parsePropertyId(prop);
+        const currentValues = value instanceof ListValue ? getValues(value) : [];
         const recentOptions = getRecentUniqueValues(propParsed.name, exerciseHistory, currentValues);
 
         displays.push({
@@ -120,7 +191,7 @@
     debugLog("Processed property displays:", propertyDisplays);
   }
 
-  async function processProperty(entry: ListEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
+  async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
     try {
       const value = entry.getValue(prop);
       if (!value) return null;
@@ -236,13 +307,12 @@
       if (!metadata?.frontmatter) continue;
 
       for (const [exerciseName, value] of Object.entries(metadata.frontmatter)) {
-        if (!Array.isArray(value)) continue;
-
         if (!history.has(exerciseName)) {
           history.set(exerciseName, []);
         }
 
-        const values = value.map((v) => sanitizeValue(v));
+        const valueArray = Array.isArray(value) ? value : !!value ? [value] : [];
+        const values = valueArray.map((v) => sanitizeValue(v));
         history.get(exerciseName)!.push(values);
       }
     }
@@ -252,8 +322,8 @@
 
   function getRecentUniqueValues(exerciseName: string, history: Map<string, number[][]>, currentValues: number[]): number[] {
     const exerciseHistory = history.get(exerciseName);
+    debugLog("history of", exerciseName, exerciseHistory);
     if (!exerciseHistory) return [];
-    debugger;
 
     // Flatten all values from history and get unique ones
     const allValues = exerciseHistory.flat();
@@ -323,12 +393,6 @@
       values.push(sanitized);
       frontmatter[exercise.prop] = values;
     });
-
-    // Clear the input after adding
-    customValues.set(exercise.prop, "");
-    selectedValues.set(exercise.prop, "");
-    customValues = customValues;
-    selectedValues = selectedValues;
   }
 
   function handleRadioChange(exerciseName: string, value: string) {
@@ -348,6 +412,12 @@
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div class="gym-container" tabindex="0" role="region" aria-label="Gym view">
+  <div class="header-section">
+    <button class="btn-new-exercise" on:click={handleCreateNewExercise} disabled={todayFileExists}>
+      {buttonLabel}
+    </button>
+  </div>
+
   {#if propertyDisplays.length === 0}
     <div class="empty-state">
       <p>No properties found. Make sure your base has defined properties.</p>
@@ -458,6 +528,37 @@
 
   .gym-container:focus {
     outline: none;
+  }
+
+  .header-section {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+  .btn-new-exercise {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 6px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .btn-new-exercise:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .btn-new-exercise:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-new-exercise:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .empty-state {

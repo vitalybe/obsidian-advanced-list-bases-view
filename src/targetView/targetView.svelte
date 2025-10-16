@@ -1,11 +1,20 @@
 <script lang="ts">
-  import { MarkdownRenderer, TFile, type App, type FrontMatterCache, type RenderContext } from "obsidian";
-  import type { ListEntry, Config, PropertyData } from "../types";
+  import {
+    MarkdownRenderer,
+    TFile,
+    type App,
+    type BasesPropertyId,
+    type BasesEntry,
+    type BasesViewConfig,
+    type FrontMatterCache,
+    type RenderContext,
+  } from "obsidian";
+  import type { PropertyData } from "../types";
 
   // Props with defaults to prevent undefined errors
-  export let entries: ListEntry[] = [];
-  export let properties: string[] = [];
-  export let config: Config | undefined = undefined;
+  export let entries: BasesEntry[] = [];
+  export let properties: BasesPropertyId[] = [];
+  export let config: BasesViewConfig | undefined = undefined;
   export let app: App;
   export let renderContext: RenderContext | undefined = undefined;
   export let component: any = undefined;
@@ -38,7 +47,7 @@
 
   // Reactive data structure for entries
   let entryData: Array<{
-    entry: ListEntry;
+    entry: BasesEntry;
     properties: PropertyData[];
   }> = [];
 
@@ -58,7 +67,7 @@
     console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
   }
 
-  async function processEntries(entries: ListEntry[], properties: string[]) {
+  async function processEntries(entries: BasesEntry[], properties: BasesPropertyId[]) {
     debugLog("processEntries");
     const processed = await Promise.all(
       entries.map(async (entry) => {
@@ -77,7 +86,7 @@
     debugLog("Updated activeTarget:", activeTarget, activeTargetLabel);
   }
 
-  async function processProperty(entry: ListEntry, prop: string): Promise<PropertyData | null> {
+  async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
     try {
       const value = entry.getValue(prop);
       if (!value) return null;
@@ -172,7 +181,7 @@
     return metadata;
   }
 
-  function getEntryFileMetadata(entry: ListEntry): FrontMatterCache | undefined {
+  function getEntryFileMetadata(entry: BasesEntry): FrontMatterCache | undefined {
     let metadata: FrontMatterCache | undefined;
     const entryFile = entry.file;
     metadata = app.metadataCache.getFileCache(entryFile) ?? undefined;
@@ -200,14 +209,14 @@
     };
   }
 
-  function getTargetValue(entry: ListEntry, target: { value: string; label: string; groups: GroupsEnum[] }): boolean {
+  function getTargetValue(entry: BasesEntry, target: { value: string; label: string; groups: GroupsEnum[] }): boolean {
     const entryFileMetadata = getEntryFileMetadata(entry);
     if (!entryFileMetadata) return false;
     const targets = entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
     return targets.includes(target.value);
   }
 
-  function handleTargetChange(entry: ListEntry, target: { value: string; label: string; groups: GroupsEnum[] }) {
+  function handleTargetChange(entry: BasesEntry, target: { value: string; label: string; groups: GroupsEnum[] }) {
     debugLog("handleTargetChange", entry, target);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
@@ -227,13 +236,13 @@
     return targets.filter((target) => target.groups.includes(group));
   }
 
-  function isGroupFullySelected(entry: ListEntry, group: GroupsEnum): boolean {
+  function isGroupFullySelected(entry: BasesEntry, group: GroupsEnum): boolean {
     const members = getGroupMembers(group);
     if (members.length === 0) return false;
     return members.every((member) => getTargetValue(entry, member));
   }
 
-  function handleGroupClick(entry: ListEntry, group: GroupsEnum) {
+  function handleGroupClick(entry: BasesEntry, group: GroupsEnum) {
     debugLog("handleGroupChange", entry, group);
     const members = getGroupMembers(group);
     const isFullySelected = isGroupFullySelected(entry, group);
@@ -281,14 +290,14 @@
     return target?.label || null;
   }
 
-  function openRedditUrl(entry: ListEntry) {
-    const redditUrl = entry.getValue("reddit_url");
+  function openRedditUrl(entry: BasesEntry) {
+    const redditUrl = entry.getValue("note.reddit_url");
     if (redditUrl) {
       window.open(redditUrl.toString(), "_blank");
     }
   }
 
-  function addActiveTargetToEntry(entry: ListEntry) {
+  function addActiveTargetToEntry(entry: BasesEntry) {
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return;
 
@@ -301,16 +310,16 @@
     });
   }
 
-  function handleWatch(entry: ListEntry) {
+  function handleWatch(entry: BasesEntry) {
     openRedditUrl(entry);
     addActiveTargetToEntry(entry);
   }
 
-  function handleMarkAsRead(entry: ListEntry) {
+  function handleMarkAsRead(entry: BasesEntry) {
     addActiveTargetToEntry(entry);
   }
 
-  function handleRemove(entry: ListEntry) {
+  function handleRemove(entry: BasesEntry) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       frontmatter[IS_DONE_PROPERTY] = true;
     });
@@ -334,12 +343,12 @@
     });
   }
 
-  function getBooleanValue(entry: ListEntry, prop: string): boolean {
-    const value: { data: boolean } | undefined = entry.getValue(prop);
+  function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
+    const value: { data: boolean } | undefined = entry.getValue(prop) as any;
     return value?.data ?? false;
   }
 
-  function getAreTargetsShown(entry: ListEntry): boolean {
+  function getAreTargetsShown(entry: BasesEntry): boolean {
     const forcedExpansionState = entriesExpansionState.get(entry.file.path);
     if (forcedExpansionState !== undefined) {
       return forcedExpansionState;
@@ -350,7 +359,7 @@
     }
   }
 
-  function toggleTargetExpansion(entry: ListEntry) {
+  function toggleTargetExpansion(entry: BasesEntry) {
     const entryPath = entry.file.path;
     const isCurrentlyShown = getAreTargetsShown(entry);
     if (isCurrentlyShown) {
@@ -364,7 +373,7 @@
     entriesExpansionState = entriesExpansionState;
   }
 
-  function getGroupCheckboxIconClass(entry: ListEntry, group: GroupsEnum): string {
+  function getGroupCheckboxIconClass(entry: BasesEntry, group: GroupsEnum): string {
     let className = "";
     if (isGroupFullySelected(entry, group)) {
       className = "checkbox-icon-checked";
@@ -374,7 +383,7 @@
     return className;
   }
 
-  function getEntryClasses(entry: ListEntry): string {
+  function getEntryClasses(entry: BasesEntry): string {
     return [
       getBooleanValue(entry, "formula.fnIsItemAboutToDisappear") ? "entry-about-to-disappear" : "",
       getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
