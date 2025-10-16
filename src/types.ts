@@ -1,15 +1,5 @@
 import type { TFile } from "obsidian";
 
-export interface ListEntry {
-  getValue(prop: string): any;
-  file: TFile;
-}
-
-export interface Config {
-  getOrder(): string[] | null;
-  getDisplayName(prop: string): string;
-}
-
 export type PropertyData =
   | {
       type: "template";

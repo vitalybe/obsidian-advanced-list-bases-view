@@ -1,4 +1,4 @@
-import { BasesView, QueryController } from "obsidian";
+import { BasesView, QueryController, type BasesEntry } from "obsidian";
 import type { ViewOption } from "obsidian";
 import ListView from "./gymView.svelte";
 
