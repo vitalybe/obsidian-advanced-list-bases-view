@@ -1,5 +1,6 @@
 import { Plugin, TFile } from "obsidian";
 import { TargetsView, TargetsViewType } from "./targetView/targetView";
+import { GymView, GymViewType } from "./gymView/gymView";
 
 export default class ObsidianAdvancedListPlugin extends Plugin {
   async onload() {
@@ -9,6 +10,13 @@ export default class ObsidianAdvancedListPlugin extends Plugin {
       icon: "lucide-target",
       factory: (controller, containerEl) => new TargetsView(controller, containerEl),
       options: TargetsView.getViewOptions,
+    });
+
+    this.registerBasesView(GymViewType, {
+      name: "Gym",
+      icon: "lucide-dumbbell",
+      factory: (controller, containerEl) => new GymView(controller, containerEl),
+      options: GymView.getViewOptions,
     });
   }
 

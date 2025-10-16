@@ -6,7 +6,8 @@
       "WebFetch(domain:docs.obsidian.md)",
       "WebSearch",
       "Bash(pnpm add:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
