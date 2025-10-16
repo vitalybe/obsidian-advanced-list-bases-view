@@ -385,7 +385,7 @@
 
   function getEntryClasses(entry: BasesEntry): string {
     return [
-      getBooleanValue(entry, "formula.fnIsItemAboutToDisappear") ? "entry-about-to-disappear" : "",
+      getBooleanValue(entry, "formula.fnzTargetItemShouldShow") === false ? "entry-about-to-disappear" : "",
       getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
     ].join(" ");
   }
