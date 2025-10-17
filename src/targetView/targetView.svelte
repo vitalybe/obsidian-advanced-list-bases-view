@@ -210,7 +210,8 @@
     const isRead = isEntryMarkedAsRead(entry);
 
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const targets = (frontmatter[TARGETS_DONE_PROPERTY] as string[]) ?? [];
+      const targetsOriginal = (frontmatter[TARGETS_DONE_PROPERTY] as unknown[] | unknown) ?? [];
+      const targets = Array.isArray(targetsOriginal) ? targetsOriginal : [targetsOriginal.toString()];
 
       if (isRead) {
         // Remove the target (mark as unread)

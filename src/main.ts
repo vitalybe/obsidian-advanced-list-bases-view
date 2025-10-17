@@ -23,7 +23,7 @@ export default class ObsidianAdvancedListPlugin extends Plugin {
   onunload() {
     console.log("onunload");
     // NOTE: For debugging hot reloading
-    this.reopenActiveView();
+    // this.reopenActiveView();
   }
 
   // Only for hot reloading
