@@ -2,9 +2,38 @@
   import type { App, BasesEntry, BasesPropertyId, FrontMatterCache } from "obsidian";
   import { GroupsEnum, ALL_GROUPS, ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
-  export let entry: BasesEntry;
-  export let app: App;
-  export let propertyName: string = "md_targets";
+  let {
+    entry,
+    app,
+    propertyName = "md_targets",
+    label = "Targets:",
+    initiallyExpanded = false
+  }: {
+    entry: BasesEntry;
+    app: App;
+    propertyName?: string;
+    label?: string;
+    initiallyExpanded?: boolean;
+  } = $props();
+
+  // Internal expansion state - can be overridden by user
+  let isExpanded = $state(initiallyExpanded);
+  let userHasInteracted = $state(false);
+
+  // Update internal state when initiallyExpanded prop changes
+  $effect(() => {
+    if (initiallyExpanded !== undefined) {
+      // Only update if user hasn't manually interacted (on first render)
+      if (!userHasInteracted) {
+        isExpanded = initiallyExpanded;
+      }
+    }
+  });
+
+  function toggleExpansion() {
+    userHasInteracted = true;
+    isExpanded = !isExpanded;
+  }
 
   function getEntryFileMetadata(entry: BasesEntry): FrontMatterCache | undefined {
     let metadata: FrontMatterCache | undefined;
@@ -26,6 +55,15 @@
 
   function formatTarget(target: DefinedTarget): string {
     return `${target.icon} ${target.value}`;
+  }
+
+  function getSelectedTargetsDisplay(): string {
+    return getEntryTargets(entry)
+      .map((entryTarget) => {
+        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+        return target ? formatTarget(target) : entryTarget;
+      })
+      .join(", ");
   }
 
   function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
@@ -81,32 +119,88 @@
     }
     return className;
   }
+
+  let minimizedDisplayedTargets = $derived.by(() => {
+    const display = getSelectedTargetsDisplay();
+    return display.trim() === "" ? "(none)" : display;
+  });
+
+  const noTargets = $derived(minimizedDisplayedTargets === "(none)");
 </script>
 
-<div class="groups-container">
-  {#each ALL_GROUPS as group}
-    <div class="groups-row">
-      <div class="targets-row">
-        <button class="btn-regular" on:click={() => handleGroupClick(entry, group.value)}>
-          <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}" />
-          <span>{group.label}</span>
-        </button>
-        {#each getGroupMembers(group.value) as target}
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              checked={getTargetValue(entry, target)}
-              on:change={() => handleTargetChange(entry, target)}
-            />
-            <span>{formatTarget(target)}</span>
-          </label>
-        {/each}
-      </div>
+<div class="target-container">
+  <button class="toggle-targets-btn" class:no-targets={noTargets} onclick={toggleExpansion}>
+    {isExpanded ? "▲" : " ▼"}
+    <b>{label}</b>
+    <span>{minimizedDisplayedTargets}</span>
+  </button>
+  {#if isExpanded}
+    <div class="groups-container">
+      {#each ALL_GROUPS as group}
+        <div class="groups-row">
+          <div class="targets-row">
+            <button class="btn-regular" onclick={() => handleGroupClick(entry, group.value)}>
+              <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}"></div>
+              <span>{group.label}</span>
+            </button>
+            {#each getGroupMembers(group.value) as target}
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={getTargetValue(entry, target)}
+                  onchange={() => handleTargetChange(entry, target)}
+                />
+                <span>{formatTarget(target)}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/each}
     </div>
-  {/each}
+  {/if}
 </div>
 
 <style>
+  .target-container {
+    background-color: hsl(180, 0%, 97%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .toggle-targets-btn {
+    align-self: flex-start;
+    display: flex;
+    gap: 0.2rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+
+  .toggle-targets-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+  }
+
+  .toggle-targets-btn:active {
+    transform: scale(0.98);
+  }
+
+  .no-targets {
+    font-style: italic;
+    color: var(--text-muted);
+  }
+
   .groups-container {
     display: flex;
     flex-direction: row;

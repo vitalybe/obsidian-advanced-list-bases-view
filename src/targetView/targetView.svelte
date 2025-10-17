@@ -14,35 +14,42 @@
   import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
   // Props with defaults to prevent undefined errors
-  export let entries: BasesEntry[] = [];
-  export let properties: BasesPropertyId[] = [];
-  export let config: BasesViewConfig | undefined = undefined;
-  export let app: App;
-  export let renderContext: RenderContext | undefined = undefined;
-  export let component: any = undefined;
+  let {
+    entries = [],
+    properties = [],
+    config = undefined,
+    app,
+    renderContext = undefined,
+    component = undefined,
+  }: {
+    entries?: BasesEntry[];
+    properties?: BasesPropertyId[];
+    config?: BasesViewConfig;
+    app: App;
+    renderContext?: RenderContext;
+    component?: any;
+  } = $props();
 
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
   const IS_DONE_PROPERTY = "md_is_done";
 
   // Reactive data structure for entries
-  let entryData: Array<{
-    entry: BasesEntry;
-    properties: PropertyData[];
-  }> = [];
+  let entryData = $state<
+    Array<{
+      entry: BasesEntry;
+      properties: PropertyData[];
+    }>
+  >([]);
 
   // Track active target
-  let activeTarget: string | undefined;
-  let activeTargetLabel: string | undefined;
-
-  // Track expanded entries (those with collapsed targets)
-  let entriesExpansionState = new Map<string, boolean>();
-  let entriesSeenExpansionState = new Map<string, boolean>();
+  let activeTarget = $state<string | undefined>(undefined);
+  let activeTargetLabel = $state<string | undefined>(undefined);
 
   // Reactively process entries when they change
-  $: {
+  $effect(() => {
     processEntries(entries, properties);
-  }
+  });
 
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
@@ -162,13 +169,6 @@
     return metadata;
   }
 
-  function getEntryFileMetadata(entry: BasesEntry): FrontMatterCache | undefined {
-    let metadata: FrontMatterCache | undefined;
-    const entryFile = entry.file;
-    metadata = app.metadataCache.getFileCache(entryFile) ?? undefined;
-    return metadata;
-  }
-
   function renderPropertyValue(element: HTMLElement, value: any) {
     // Render property value when element is mounted
     if (value && renderContext) {
@@ -190,38 +190,8 @@
     };
   }
 
-  function getEntryTargets(entry: BasesEntry): string[] {
-    const entryFileMetadata = getEntryFileMetadata(entry);
-    if (!entryFileMetadata) return [];
-    return entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
-  }
-
   function formatTarget(target: DefinedTarget): string {
     return `${target.icon} ${target.value}`;
-  }
-
-  function getSelectedTargets(entry: BasesEntry): string {
-    return getEntryTargets(entry)
-      .map((entryTarget) => {
-        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-        return target ? formatTarget(target) : entryTarget;
-      })
-      .join(", ");
-  }
-
-  function getEntryTargetsDone(entry: BasesEntry): string[] {
-    const entryFileMetadata = getEntryFileMetadata(entry);
-    if (!entryFileMetadata) return [];
-    return entryFileMetadata.frontmatter[TARGETS_DONE_PROPERTY] ?? [];
-  }
-
-  function getSelectedTargetsDone(entry: BasesEntry): string {
-    return getEntryTargetsDone(entry)
-      .map((entryTarget) => {
-        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-        return target ? formatTarget(target) : entryTarget;
-      })
-      .join(", ");
   }
 
   function getActiveFileTarget(): string | undefined {
@@ -307,36 +277,8 @@
   }
 
   function getAreTargetsShown(entry: BasesEntry): boolean {
-    const forcedExpansionState = entriesExpansionState.get(entry.file.path);
-    if (forcedExpansionState !== undefined) {
-      return forcedExpansionState;
-    } else {
-      const areTargetsEmpty = getBooleanValue(entry, "formula.fnzTargetsEmptyTargets");
-      const isRecentlyModified = getBooleanValue(entry, "formula.fnzIsRecentlyModified");
-      return areTargetsEmpty || isRecentlyModified;
-    }
-  }
-
-  function toggleTargetExpansion(entry: BasesEntry) {
-    const entryPath = entry.file.path;
-    const isCurrentlyShown = getAreTargetsShown(entry);
-    if (isCurrentlyShown) {
-      debugLog("toggleTargetExpansion", entry, "hiding targets");
-      entriesExpansionState.set(entryPath, false);
-    } else {
-      debugLog("toggleTargetExpansion", entry, "showing targets");
-      entriesExpansionState.set(entryPath, true);
-    }
-    // Trigger reactivity
-    entriesExpansionState = entriesExpansionState;
-  }
-
-  function toggleSeenExpansion(entry: BasesEntry) {
-    const entryPath = entry.file.path;
-    const isCurrentlyShown = entriesSeenExpansionState.get(entryPath) ?? false;
-    entriesSeenExpansionState.set(entryPath, !isCurrentlyShown);
-    // Trigger reactivity
-    entriesSeenExpansionState = entriesSeenExpansionState;
+    const areTargetsEmpty = getBooleanValue(entry, "formula.fnzTargetsEmptyTargets");
+    return areTargetsEmpty;
   }
 
   function getEntryClasses(entry: BasesEntry): string {
@@ -347,11 +289,11 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
   <div class="target-selector">
     <label for="active-target-select">Select your target:</label>
-    <select id="active-target-select" value={activeTarget || ""} on:change={handleFilterSelect}>
+    <select id="active-target-select" value={activeTarget || ""} onchange={handleFilterSelect}>
       <option value="">All</option>
       {#each ALL_TARGETS as target}
         <option value={target.value}>{formatTarget(target)}</option>
@@ -375,35 +317,23 @@
       {/each}
       <div class="actions-container">
         {#if activeTarget}
-          <button class="btn-primary" on:click={() => handleWatch(entry)}>
+          <button class="btn-primary" onclick={() => handleWatch(entry)}>
             Watch ({activeTargetLabel})
           </button>
-          <button class="btn-regular" on:click={() => handleMarkAsRead(entry)}>Mark Read ({activeTargetLabel})</button>
+          <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>Mark Read ({activeTargetLabel})</button>
         {/if}
-        <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
-        <button class="btn-destructive" on:click={() => handleRemove(entry)}>Remove</button>
+        <button class="btn-regular" onclick={() => openRedditUrl(entry)}> Open </button>
+        <button class="btn-destructive" onclick={() => handleRemove(entry)}>Remove</button>
       </div>
       <div class="target-controls">
-        <div class="target-container">
-          <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry)}>
-            {entriesExpansionState && getAreTargetsShown(entry) ? "▲" : " ▼"}
-            <b>Targets:</b>
-            <span>{getSelectedTargets(entry)}</span>
-          </button>
-          {#if entriesExpansionState && getAreTargetsShown(entry)}
-            <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets" />
-          {/if}
-        </div>
-        <div class="target-container">
-          <button class="toggle-targets-btn" on:click={() => toggleSeenExpansion(entry)}>
-            {entriesSeenExpansionState.get(entry.file.path) ? "▲" : " ▼"}
-            <b>Seen:</b>
-            <span>{getSelectedTargetsDone(entry)}</span>
-          </button>
-          {#if entriesSeenExpansionState.get(entry.file.path)}
-            <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets_done" />
-          {/if}
-        </div>
+        <GroupsAndTargetsSelector
+          {entry}
+          {app}
+          propertyName="md_targets"
+          label="Targets:"
+          initiallyExpanded={getAreTargetsShown(entry)}
+        />
+        <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets_done" label="Seen:" initiallyExpanded={false} />
       </div>
       {#if index < entryData.length - 1}
         <hr class="entry-separator" />
@@ -528,40 +458,7 @@
     display: flex;
     flex-direction: row;
     gap: 0.5rem;
-  }
-
-  .target-container {
-    background-color: hsl(180, 0%, 97%);
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    padding: 0.75rem;
-    box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.05);
-  }
-
-  .toggle-targets-btn {
-    align-self: flex-start;
-    display: flex;
-    gap: 0.2rem;
-    padding: 0.3rem 0.6rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background-color: var(--background-primary);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-  }
-
-  .toggle-targets-btn:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
-  }
-
-  .toggle-targets-btn:active {
-    transform: scale(0.98);
+    align-items: start;
+    flex-wrap: wrap;
   }
 </style>

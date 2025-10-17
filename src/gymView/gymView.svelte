@@ -17,12 +17,21 @@
   import { debug } from "console";
 
   // Props with defaults to prevent undefined errors
-  export let entries: BasesEntry[] = [];
-  export let properties: BasesPropertyId[] = [];
-  export let config: BasesViewConfig | undefined = undefined;
-  export let app: App;
-  export let renderContext: RenderContext | undefined = undefined;
-  export let component: any = undefined;
+  let {
+    entries = [],
+    properties = [],
+    config = undefined,
+    app,
+    renderContext = undefined,
+    component = undefined
+  }: {
+    entries?: BasesEntry[];
+    properties?: BasesPropertyId[];
+    config?: BasesViewConfig;
+    app: App;
+    renderContext?: RenderContext;
+    component?: any;
+  } = $props();
 
   // Exercise data structure (for List-type properties)
   interface ExerciseData {
@@ -40,30 +49,30 @@
     propertyData?: PropertyData;
   }
 
-  let propertyDisplays: PropertyDisplay[] = [];
-  let selectedValues: Map<string, string> = new Map();
-  let customValues: Map<string, string> = new Map();
-  let todayFileExists = false;
-  let lastExerciseDate: DateTime | null = null;
-  let currentTime = DateTime.now();
+  let propertyDisplays = $state<PropertyDisplay[]>([]);
+  let selectedValues = $state<Map<string, string>>(new Map());
+  let customValues = $state<Map<string, string>>(new Map());
+  let todayFileExists = $state(false);
+  let lastExerciseDate = $state<DateTime | null>(null);
+  let currentTime = $state(DateTime.now());
   let timerInterval: number | null = null;
-  let expandedExercise: string | null = null;
+  let expandedExercise = $state<string | null>(null);
 
   // Reactively process entries when they change
-  $: {
+  $effect(() => {
     processEntries(entries, properties);
-  }
+  });
 
   // Reactively check if today's file exists
-  $: {
+  $effect(() => {
     checkTodayFileExists();
-  }
+  });
 
   // Check if timer should be shown (within last 2 minutes)
-  $: showTimer = lastExerciseDate && currentTime.diff(lastExerciseDate, "minutes").minutes < 2;
+  let showTimer = $derived(lastExerciseDate && currentTime.diff(lastExerciseDate, "minutes").minutes < 2);
 
   // Calculate elapsed time string
-  $: elapsedTime = lastExerciseDate ? formatElapsedTime(currentTime.diff(lastExerciseDate).as("milliseconds")) : "";
+  let elapsedTime = $derived(lastExerciseDate ? formatElapsedTime(currentTime.diff(lastExerciseDate).as("milliseconds")) : "");
 
   onMount(() => {
     // Update current time every second
@@ -473,10 +482,10 @@
   }
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="gym-container" tabindex="0" role="region" aria-label="Gym view">
   <div class="header-section">
-    <button class="btn-new-exercise" on:click={handleCreateNewExercise} disabled={todayFileExists}>
+    <button class="btn-new-exercise" onclick={handleCreateNewExercise} disabled={todayFileExists}>
       {buttonLabel}
     </button>
   </div>
@@ -490,11 +499,11 @@
       {#if display.type === "exercise" && display.exerciseData}
         <!-- Exercise form for List-type properties -->
         <div class="exercise-card" class:collapsed={!isExerciseExpanded(expandedExercise, display.exerciseData.prop)}>
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="exercise-header"
-            on:click={() => (display.exerciseData ? toggleExercise(display.exerciseData.prop) : undefined)}
+            onclick={() => (display.exerciseData ? toggleExercise(display.exerciseData.prop) : undefined)}
             role="button"
             tabindex="0"
           >
@@ -523,7 +532,7 @@
                       <span class="value-text">{value}</span>
                       <button
                         class="btn-remove"
-                        on:click={() => handleRemoveValue(display.exerciseData, index)}
+                        onclick={() => handleRemoveValue(display.exerciseData, index)}
                         title="Remove this value"
                       >
                         ×
@@ -548,7 +557,7 @@
                         name={`exercise-${display.exerciseData.prop}`}
                         value={option}
                         checked={selectedValues.get(display.exerciseData.prop) === option.toString()}
-                        on:change={() =>
+                        onchange={() =>
                           display.exerciseData ? handleRadioChange(display.exerciseData.prop, option.toString()) : undefined}
                       />
                       <span>{option}</span>
@@ -567,12 +576,12 @@
                   class="text-input"
                   placeholder="Enter new value..."
                   value={customValues.get(display.exerciseData.prop) || ""}
-                  on:input={(e) =>
+                  oninput={(e) =>
                     display.exerciseData ? handleCustomValueChange(display.exerciseData.prop, e.currentTarget.value) : undefined}
                 />
                 <button
                   class="btn-submit"
-                  on:click={() => (display.exerciseData ? handleAddValue(display.exerciseData) : undefined)}
+                  onclick={() => (display.exerciseData ? handleAddValue(display.exerciseData) : undefined)}
                 >
                   Submit
                 </button>
