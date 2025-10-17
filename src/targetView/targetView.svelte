@@ -199,8 +199,10 @@
   }
 
   function handleWatch(entry: BasesEntry) {
-    openRedditUrl(entry);
     addActiveTargetToEntry(entry);
+    setTimeout(() => {
+      openRedditUrl(entry);
+    }, 100);
   }
 
   function handleMarkAsRead(entry: BasesEntry) {
