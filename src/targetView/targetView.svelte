@@ -25,20 +25,26 @@
     ADULTS = "Adults",
   }
 
-  const groups = [
+  interface DefinedTarget {
+    value: string;
+    icon: string;
+    groups: GroupsEnum[];
+  }
+
+  const ALL_GROUPS = [
     { value: GroupsEnum.KIDS, label: "Kids" },
     { value: GroupsEnum.ANIMALS, label: "Animals" },
     { value: GroupsEnum.ADULTS, label: "Adults" },
   ];
 
-  const targets = [
-    { value: "Eli", label: "Eli 👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Emily", label: "Emily 👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Lia", label: "Lia 👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Inga", label: "Inga 👸🏻", groups: [GroupsEnum.ADULTS] },
-    { value: "Esty", label: "Esty 🌸", groups: [GroupsEnum.ADULTS, GroupsEnum.ANIMALS] },
-    { value: "Pub", label: "Pub 🍺", groups: [GroupsEnum.ADULTS] },
-    { value: "Vitaly", label: "Vitaly 👨🏻", groups: [GroupsEnum.ADULTS] },
+  const ALL_TARGETS = [
+    { value: "Eli", icon: "👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Emily", icon: "👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Lia", icon: "👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
+    { value: "Inga", icon: "👸🏻", groups: [GroupsEnum.ADULTS] },
+    { value: "Esty", icon: "🌸", groups: [GroupsEnum.ADULTS, GroupsEnum.ANIMALS] },
+    { value: "Pub", icon: "🍺", groups: [GroupsEnum.ADULTS] },
+    { value: "Vitaly", icon: "👨🏻", groups: [GroupsEnum.ADULTS] },
   ];
 
   const TARGETS_PROPERTY = "md_targets";
@@ -53,7 +59,7 @@
 
   // Track active target
   let activeTarget: string | undefined;
-  let activeTargetLabel: string | null;
+  let activeTargetLabel: string | undefined;
 
   // Track expanded entries (those with collapsed targets)
   let entriesExpansionState = new Map<string, boolean>();
@@ -209,14 +215,31 @@
     };
   }
 
-  function getTargetValue(entry: BasesEntry, target: { value: string; label: string; groups: GroupsEnum[] }): boolean {
+  function getEntryTargets(entry: BasesEntry): string[] {
     const entryFileMetadata = getEntryFileMetadata(entry);
-    if (!entryFileMetadata) return false;
-    const targets = entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
+    if (!entryFileMetadata) return [];
+    return entryFileMetadata.frontmatter[TARGETS_PROPERTY] ?? [];
+  }
+
+  function getTargetValue(entry: BasesEntry, target: DefinedTarget): boolean {
+    const targets = getEntryTargets(entry);
     return targets.includes(target.value);
   }
 
-  function handleTargetChange(entry: BasesEntry, target: { value: string; label: string; groups: GroupsEnum[] }) {
+  function formatTarget(target: DefinedTarget): string {
+    return `${target.icon} ${target.value}`;
+  }
+
+  function getSelectedTargets(entry: BasesEntry): string {
+    return getEntryTargets(entry)
+      .map((entryTarget) => {
+        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+        return target ? formatTarget(target) : entryTarget;
+      })
+      .join(", ");
+  }
+
+  function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
     debugLog("handleTargetChange", entry, target);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
@@ -233,7 +256,7 @@
   }
 
   function getGroupMembers(group: GroupsEnum) {
-    return targets.filter((target) => target.groups.includes(group));
+    return ALL_TARGETS.filter((target) => target.groups.includes(group));
   }
 
   function isGroupFullySelected(entry: BasesEntry, group: GroupsEnum): boolean {
@@ -283,11 +306,11 @@
     return target;
   }
 
-  function getActiveFileTargetLabel(): string | null {
+  function getActiveFileTargetLabel(): string | undefined {
     const targetValue = getActiveFileTarget();
-    if (!targetValue) return null;
-    const target = targets.find((t) => t.value === targetValue);
-    return target?.label || null;
+    const target = ALL_TARGETS.find((t) => t.value === targetValue);
+
+    return target ? formatTarget(target) : undefined;
   }
 
   function openRedditUrl(entry: BasesEntry) {
@@ -397,8 +420,8 @@
     <label for="active-target-select">Select your target:</label>
     <select id="active-target-select" value={activeTarget || ""} on:change={handleFilterSelect}>
       <option value="">All</option>
-      {#each targets as target}
-        <option value={target.value}>{target.label}</option>
+      {#each ALL_TARGETS as target}
+        <option value={target.value}>{formatTarget(target)}</option>
       {/each}
     </select>
   </div>
@@ -430,7 +453,7 @@
       <div class="target-container">
         {#if entriesExpansionState && getAreTargetsShown(entry)}
           <div class="groups-row">
-            {#each groups as group}
+            {#each ALL_GROUPS as group}
               <button class="btn-regular" on:click={() => handleGroupClick(entry, group.value)}>
                 <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}" />
                 <span>{group.label}</span>
@@ -438,20 +461,20 @@
             {/each}
           </div>
           <div class="targets-row">
-            {#each targets as target}
+            {#each ALL_TARGETS as target}
               <label class="checkbox-label">
                 <input
                   type="checkbox"
                   checked={getTargetValue(entry, target)}
                   on:change={() => handleTargetChange(entry, target)}
                 />
-                <span>{target.label}</span>
+                <span>{formatTarget(target)}</span>
               </label>
             {/each}
           </div>
         {/if}
         <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry)}>
-          {entriesExpansionState && getAreTargetsShown(entry) ? "▲ Hide targets" : "▼ Show targets"}
+          {entriesExpansionState && getAreTargetsShown(entry) ? "▲ Hide targets" : "Targets: " + getSelectedTargets(entry) + " ▼"}
         </button>
       </div>
       {#if index < entryData.length - 1}
