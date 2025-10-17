@@ -244,12 +244,36 @@
   }
 
   function handleMarkAsRead(entry: BasesEntry) {
-    addActiveTargetToEntry(entry);
+    const activeTarget = getActiveFileTarget();
+    if (!activeTarget) return;
+
+    const isRead = isEntryMarkedAsRead(entry);
+
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      const targets = (frontmatter[TARGETS_DONE_PROPERTY] as string[]) ?? [];
+
+      if (isRead) {
+        // Remove the target (mark as unread)
+        const index = targets.indexOf(activeTarget);
+        if (index > -1) {
+          targets.splice(index, 1);
+        }
+      } else {
+        // Add the target (mark as read)
+        if (!targets.includes(activeTarget)) {
+          targets.push(activeTarget);
+        }
+      }
+
+      frontmatter[TARGETS_DONE_PROPERTY] = targets;
+    });
   }
 
   function handleRemove(entry: BasesEntry) {
+    const isDone = isEntryMarkedAsDone(entry);
+
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      frontmatter[IS_DONE_PROPERTY] = true;
+      frontmatter[IS_DONE_PROPERTY] = !isDone;
     });
   }
 
@@ -274,6 +298,21 @@
   function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
     const value: { data: boolean } | undefined = entry.getValue(prop) as any;
     return value?.data ?? false;
+  }
+
+  function isEntryMarkedAsRead(entry: BasesEntry): boolean {
+    const activeTarget = getActiveFileTarget();
+    if (!activeTarget) return false;
+
+    const targetsDone = entry.getValue(TARGETS_DONE_PROPERTY);
+    if (!targetsDone) return false;
+
+    const targetsDoneArray = Array.isArray(targetsDone) ? targetsDone : [targetsDone];
+    return targetsDoneArray.some((t: any) => t.toString() === activeTarget);
+  }
+
+  function isEntryMarkedAsDone(entry: BasesEntry): boolean {
+    return getBooleanValue(entry, IS_DONE_PROPERTY);
   }
 
   function getAreTargetsShown(entry: BasesEntry): boolean {
@@ -320,10 +359,14 @@
           <button class="btn-primary" onclick={() => handleWatch(entry)}>
             Watch ({activeTargetLabel})
           </button>
-          <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>Mark Read ({activeTargetLabel})</button>
+          <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>
+            {isEntryMarkedAsRead(entry) ? `Unmark Read (${activeTargetLabel})` : `Mark Read (${activeTargetLabel})`}
+          </button>
         {/if}
         <button class="btn-regular" onclick={() => openRedditUrl(entry)}> Open </button>
-        <button class="btn-destructive" onclick={() => handleRemove(entry)}>Remove</button>
+        <button class="btn-destructive" onclick={() => handleRemove(entry)}>
+          {isEntryMarkedAsDone(entry) ? 'Restore' : 'Remove'}
+        </button>
       </div>
       <div class="target-controls">
         <GroupsAndTargetsSelector
