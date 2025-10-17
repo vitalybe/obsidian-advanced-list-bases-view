@@ -1,20 +1,10 @@
-import type { TFile } from "obsidian";
+import { type BasesPropertyId } from "obsidian";
 
-export type PropertyData =
-  | {
-      type: "template";
-      prop: string;
-      templateContent: string;
-      filePath: string;
-    }
-  | {
-      type: "property";
-      prop: string;
-      label: string;
-      value: any;
-    }
-  | {
-      type: "error";
-      prop: string;
-      message: string;
-    };
+export interface PropertyData {
+  type: "property";
+  propertyFull: BasesPropertyId;
+  propertyName: string;
+  propertyType: string;
+  label: string;
+  value: any;
+}

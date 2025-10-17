@@ -8,6 +8,7 @@
     type BasesViewConfig,
     type FrontMatterCache,
     type RenderContext,
+    parsePropertyId,
   } from "obsidian";
   import type { PropertyData } from "../types";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
@@ -38,7 +39,7 @@
   let entryData = $state<
     Array<{
       entry: BasesEntry;
-      properties: PropertyData[];
+      baseProperties: PropertyData[];
     }>
   >([]);
 
@@ -62,7 +63,7 @@
         const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
         return {
           entry,
-          properties: props.filter((p) => p !== null) as PropertyData[],
+          baseProperties: props.filter((p) => p !== null) as PropertyData[],
         };
       })
     );
@@ -79,58 +80,17 @@
       const value = entry.getValue(prop);
       if (!value) return null;
 
-      const valueStr = value.toString();
+      const propParsed = parsePropertyId(prop);
 
       // Check if this is a dynamic template directive
-      if (valueStr.startsWith("!dynamic=")) {
-        const templatePath = valueStr.substring("!dynamic=".length);
-        const filePath = entry.file.path;
-
-        try {
-          if (!app) {
-            return {
-              type: "error",
-              prop,
-              message: "App not initialized",
-            };
-          }
-
-          const templateFile = app.vault.getAbstractFileByPath(templatePath);
-          if (templateFile && templateFile instanceof TFile) {
-            const templateContent = await app.vault.read(templateFile);
-            const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
-
-            return {
-              type: "template",
-              prop,
-              templateContent: renderedContent,
-              filePath,
-            };
-          } else {
-            return {
-              type: "error",
-              prop,
-              message: `Template file not found: ${templatePath}`,
-            };
-          }
-        } catch (error: any) {
-          console.error(`Error rendering template for ${filePath}:`, error);
-          return {
-            type: "error",
-            prop,
-            message: `Error: ${error.message}`,
-          };
-        }
-      } else if (valueStr.trim() !== "") {
-        return {
-          type: "property",
-          prop,
-          label: config?.getDisplayName(prop) || prop,
-          value,
-        };
-      }
-
-      return null;
+      return {
+        type: "property",
+        propertyFull: prop,
+        propertyName: propParsed.name,
+        propertyType: propParsed.type,
+        label: config?.getDisplayName(prop) || prop,
+        value,
+      };
     } catch (error) {
       console.error(`Error processing property ${prop}:`, error);
       return null;
@@ -304,7 +264,7 @@
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return false;
 
-    const targetsDone = entry.getValue(TARGETS_DONE_PROPERTY);
+    const targetsDone = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`);
     if (!targetsDone) return false;
 
     const targetsDoneArray = Array.isArray(targetsDone) ? targetsDone : [targetsDone];
@@ -312,7 +272,7 @@
   }
 
   function isEntryMarkedAsDone(entry: BasesEntry): boolean {
-    return getBooleanValue(entry, IS_DONE_PROPERTY);
+    return getBooleanValue(entry, `note.${IS_DONE_PROPERTY}`);
   }
 
   function getAreTargetsShown(entry: BasesEntry): boolean {
@@ -325,6 +285,18 @@
       getBooleanValue(entry, "formula.fnzTargetItemShouldShow") === false ? "entry-about-to-disappear" : "",
       getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
     ].join(" ");
+  }
+
+  function handlePropertyChange(entry: BasesEntry, propertyName: string, newValue: string) {
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      frontmatter[propertyName] = newValue;
+    });
+  }
+
+  function getTextAreaRowsCount(content: string): number {
+    const newLines = (content.match(/\n/g) || []).length;
+    const linesPerContent = content.length / 50 + 1;
+    return Math.max(linesPerContent, newLines, 1);
   }
 </script>
 
@@ -340,19 +312,23 @@
     </select>
   </div>
 
-  {#each entryData as { entry, properties: props }, index (entry.file.path)}
+  {#each entryData as { entry, baseProperties: props }, index (entry.file.path)}
     <div class="entry {getEntryClasses(entry)}">
-      {#each props as propData (propData.prop)}
-        {#if propData.type === "template"}
-          <div class="template" use:renderMarkdown={{ content: propData.templateContent, filePath: propData.filePath }}></div>
-        {:else if propData.type === "property"}
-          <div class="property">
-            <span class="property-label">{propData.label}</span>
+      {#each props as propData (propData.propertyFull)}
+        <div class="property">
+          <label class="property-label" for={`${entry.file.path}-${propData.propertyFull}`}>{propData.label}</label>
+          {#if propData.propertyType === "note"}
+            <textarea
+              id={`${entry.file.path}-${propData.propertyFull}`}
+              class="property-input"
+              rows={getTextAreaRowsCount(propData.value?.toString() || "1")}
+              value={propData.value?.toString() || ""}
+              onblur={(e) => handlePropertyChange(entry, propData.propertyName, (e.target as HTMLTextAreaElement).value)}
+            ></textarea>
+          {:else}
             <span class="property-value" use:renderPropertyValue={propData.value}></span>
-          </div>
-        {:else if propData.type === "error"}
-          <div class="error">{propData.message}</div>
-        {/if}
+          {/if}
+        </div>
       {/each}
       <div class="actions-container">
         {#if activeTarget}
@@ -365,7 +341,7 @@
         {/if}
         <button class="btn-regular" onclick={() => openRedditUrl(entry)}> Open </button>
         <button class="btn-destructive" onclick={() => handleRemove(entry)}>
-          {isEntryMarkedAsDone(entry) ? 'Restore' : 'Remove'}
+          {isEntryMarkedAsDone(entry) ? "Restore" : "Remove"}
         </button>
       </div>
       <div class="target-controls">
@@ -449,10 +425,29 @@
     display: flex;
     flex-direction: column;
     margin-bottom: 0.25rem;
+    gap: 0.25rem;
   }
 
   .property-label {
     font-weight: bold;
+    font-size: 0.9rem;
+  }
+
+  .property-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-family: var(--font-interface);
+    font-size: 0.9rem;
+    resize: vertical;
+  }
+
+  .property-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
   }
 
   .error {
