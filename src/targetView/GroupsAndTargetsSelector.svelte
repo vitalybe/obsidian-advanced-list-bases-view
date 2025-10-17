@@ -1,38 +1,10 @@
 <script lang="ts">
   import type { App, BasesEntry, BasesPropertyId, FrontMatterCache } from "obsidian";
+  import { GroupsEnum, ALL_GROUPS, ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
   export let entry: BasesEntry;
   export let app: App;
-
-  enum GroupsEnum {
-    KIDS = "Kids",
-    ANIMALS = "Animals",
-    ADULTS = "Adults",
-  }
-
-  interface DefinedTarget {
-    value: string;
-    icon: string;
-    groups: GroupsEnum[];
-  }
-
-  const ALL_GROUPS = [
-    { value: GroupsEnum.KIDS, label: "Kids" },
-    { value: GroupsEnum.ANIMALS, label: "Animals" },
-    { value: GroupsEnum.ADULTS, label: "Adults" },
-  ];
-
-  const ALL_TARGETS = [
-    { value: "Eli", icon: "👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Emily", icon: "👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Lia", icon: "👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Inga", icon: "👸🏻", groups: [GroupsEnum.ADULTS] },
-    { value: "Esty", icon: "🌸", groups: [GroupsEnum.ADULTS, GroupsEnum.ANIMALS] },
-    { value: "Pub", icon: "🍺", groups: [GroupsEnum.ADULTS] },
-    { value: "Vitaly", icon: "👨🏻", groups: [GroupsEnum.ADULTS] },
-  ];
-
-  const TARGETS_PROPERTY = "md_targets";
+  export let propertyName: string = "md_targets";
 
   function getEntryFileMetadata(entry: BasesEntry): FrontMatterCache | undefined {
     let metadata: FrontMatterCache | undefined;
@@ -44,7 +16,7 @@
   function getEntryTargets(entry: BasesEntry): string[] {
     const entryFileMetadata = getEntryFileMetadata(entry);
     if (!entryFileMetadata) return [];
-    return entryFileMetadata.frontmatter?.[TARGETS_PROPERTY] ?? [];
+    return entryFileMetadata.frontmatter?.[propertyName] ?? [];
   }
 
   function getTargetValue(entry: BasesEntry, target: DefinedTarget): boolean {
@@ -58,14 +30,14 @@
 
   function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+      const targets = (frontmatter[propertyName] as string[]) ?? [];
       const index = targets.indexOf(target.value);
       if (index > -1) {
         targets.splice(index, 1);
       } else {
         targets.push(target.value);
       }
-      frontmatter[TARGETS_PROPERTY] = targets;
+      frontmatter[propertyName] = targets;
     });
   }
 
@@ -84,7 +56,7 @@
     const isFullySelected = isGroupFullySelected(entry, group);
 
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      let targets = (frontmatter[TARGETS_PROPERTY] as string[]) ?? [];
+      let targets = (frontmatter[propertyName] as string[]) ?? [];
 
       if (isFullySelected) {
         targets = targets.filter((t) => !members.some((m) => m.value === t));
@@ -96,7 +68,7 @@
         });
       }
 
-      frontmatter[TARGETS_PROPERTY] = targets;
+      frontmatter[propertyName] = targets;
     });
   }
 

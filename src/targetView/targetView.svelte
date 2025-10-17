@@ -10,7 +10,8 @@
     type RenderContext,
   } from "obsidian";
   import type { PropertyData } from "../types";
-  import TargetGroupsSelector from "./TargetGroupsSelector.svelte";
+  import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
+  import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
   // Props with defaults to prevent undefined errors
   export let entries: BasesEntry[] = [];
@@ -19,28 +20,6 @@
   export let app: App;
   export let renderContext: RenderContext | undefined = undefined;
   export let component: any = undefined;
-
-  enum GroupsEnum {
-    KIDS = "Kids",
-    ANIMALS = "Animals",
-    ADULTS = "Adults",
-  }
-
-  interface DefinedTarget {
-    value: string;
-    icon: string;
-    groups: GroupsEnum[];
-  }
-
-  const ALL_TARGETS = [
-    { value: "Eli", icon: "👦🏻", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Emily", icon: "👧🏽", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Lia", icon: "👧🏼", groups: [GroupsEnum.KIDS, GroupsEnum.ANIMALS] },
-    { value: "Inga", icon: "👸🏻", groups: [GroupsEnum.ADULTS] },
-    { value: "Esty", icon: "🌸", groups: [GroupsEnum.ADULTS, GroupsEnum.ANIMALS] },
-    { value: "Pub", icon: "🍺", groups: [GroupsEnum.ADULTS] },
-    { value: "Vitaly", icon: "👨🏻", groups: [GroupsEnum.ADULTS] },
-  ];
 
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
@@ -58,6 +37,7 @@
 
   // Track expanded entries (those with collapsed targets)
   let entriesExpansionState = new Map<string, boolean>();
+  let entriesSeenExpansionState = new Map<string, boolean>();
 
   // Reactively process entries when they change
   $: {
@@ -229,6 +209,21 @@
       .join(", ");
   }
 
+  function getEntryTargetsDone(entry: BasesEntry): string[] {
+    const entryFileMetadata = getEntryFileMetadata(entry);
+    if (!entryFileMetadata) return [];
+    return entryFileMetadata.frontmatter[TARGETS_DONE_PROPERTY] ?? [];
+  }
+
+  function getSelectedTargetsDone(entry: BasesEntry): string {
+    return getEntryTargetsDone(entry)
+      .map((entryTarget) => {
+        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+        return target ? formatTarget(target) : entryTarget;
+      })
+      .join(", ");
+  }
+
   function getActiveFileTarget(): string | undefined {
     let target: string | undefined;
 
@@ -336,6 +331,14 @@
     entriesExpansionState = entriesExpansionState;
   }
 
+  function toggleSeenExpansion(entry: BasesEntry) {
+    const entryPath = entry.file.path;
+    const isCurrentlyShown = entriesSeenExpansionState.get(entryPath) ?? false;
+    entriesSeenExpansionState.set(entryPath, !isCurrentlyShown);
+    // Trigger reactivity
+    entriesSeenExpansionState = entriesSeenExpansionState;
+  }
+
   function getEntryClasses(entry: BasesEntry): string {
     return [
       getBooleanValue(entry, "formula.fnzTargetItemShouldShow") === false ? "entry-about-to-disappear" : "",
@@ -388,7 +391,17 @@
             <span>{getSelectedTargets(entry)}</span>
           </button>
           {#if entriesExpansionState && getAreTargetsShown(entry)}
-            <TargetGroupsSelector {entry} {app} />
+            <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets" />
+          {/if}
+        </div>
+        <div class="target-container">
+          <button class="toggle-targets-btn" on:click={() => toggleSeenExpansion(entry)}>
+            {entriesSeenExpansionState.get(entry.file.path) ? "▲" : " ▼"}
+            <b>Seen:</b>
+            <span>{getSelectedTargetsDone(entry)}</span>
+          </button>
+          {#if entriesSeenExpansionState.get(entry.file.path)}
+            <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets_done" />
           {/if}
         </div>
       </div>
