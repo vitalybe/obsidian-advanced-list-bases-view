@@ -45,7 +45,8 @@
   function getEntryTargets(entry: BasesEntry): string[] {
     const entryFileMetadata = getEntryFileMetadata(entry);
     if (!entryFileMetadata) return [];
-    return entryFileMetadata.frontmatter?.[propertyName] ?? [];
+    const result = entryFileMetadata.frontmatter?.[propertyName] ?? [];
+    return Array.isArray(result) ? result : [result];
   }
 
   function getTargetValue(entry: BasesEntry, target: DefinedTarget): boolean {
