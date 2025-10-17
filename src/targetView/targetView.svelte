@@ -397,7 +397,7 @@
   }
 
   function getGroupCheckboxIconClass(entry: BasesEntry, group: GroupsEnum): string {
-    let className = "";
+    let className = "checkbox-icon-unchecked";
     if (isGroupFullySelected(entry, group)) {
       className = "checkbox-icon-checked";
     } else if (getGroupMembers(group).some((member) => getTargetValue(entry, member))) {
@@ -450,32 +450,38 @@
         <button class="btn-regular" on:click={() => openRedditUrl(entry)}> Open </button>
         <button class="btn-destructive" on:click={() => handleRemove(entry)}>Remove</button>
       </div>
-      <div class="target-container">
-        {#if entriesExpansionState && getAreTargetsShown(entry)}
-          <div class="groups-row">
-            {#each ALL_GROUPS as group}
-              <button class="btn-regular" on:click={() => handleGroupClick(entry, group.value)}>
-                <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}" />
-                <span>{group.label}</span>
-              </button>
-            {/each}
-          </div>
-          <div class="targets-row">
-            {#each ALL_TARGETS as target}
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={getTargetValue(entry, target)}
-                  on:change={() => handleTargetChange(entry, target)}
-                />
-                <span>{formatTarget(target)}</span>
-              </label>
-            {/each}
-          </div>
-        {/if}
-        <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry)}>
-          {entriesExpansionState && getAreTargetsShown(entry) ? "▲ Hide targets" : "Targets: " + getSelectedTargets(entry) + " ▼"}
-        </button>
+      <div class="target-controls">
+        <div class="target-container">
+          <button class="toggle-targets-btn" on:click={() => toggleTargetExpansion(entry)}>
+            {entriesExpansionState && getAreTargetsShown(entry) ? "▲" : " ▼"}
+            <b>Targets:</b>
+            <span>{getSelectedTargets(entry)}</span>
+          </button>
+          {#if entriesExpansionState && getAreTargetsShown(entry)}
+            <div class="groups-container">
+              {#each ALL_GROUPS as group}
+                <div class="groups-row">
+                  <div class="targets-row">
+                    <button class="btn-regular" on:click={() => handleGroupClick(entry, group.value)}>
+                      <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}" />
+                      <span>{group.label}</span>
+                    </button>
+                    {#each getGroupMembers(group.value) as target}
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={getTargetValue(entry, target)}
+                          on:change={() => handleTargetChange(entry, target)}
+                        />
+                        <span>{formatTarget(target)}</span>
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
       {#if index < entryData.length - 1}
         <hr class="entry-separator" />
@@ -596,22 +602,40 @@
     color: var(--text-on-accent);
   }
 
+  .target-controls {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+
   .target-container {
+    background-color: hsl(180, 0%, 97%);
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 0.5rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.05);
+  }
+  .groups-container {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
   }
 
   .groups-row {
     display: flex;
+    flex-direction: row;
     gap: 1rem;
     flex-wrap: wrap;
   }
 
   .targets-row {
     display: flex;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.5rem;
     flex-wrap: wrap;
   }
 
@@ -628,6 +652,9 @@
   }
 
   .toggle-targets-btn {
+    align-self: flex-start;
+    display: flex;
+    gap: 0.2rem;
     padding: 0.3rem 0.6rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
@@ -636,7 +663,6 @@
     cursor: pointer;
     font-size: 0.85rem;
     transition: all 0.2s;
-    margin-top: 0.5rem;
   }
 
   .toggle-targets-btn:hover {
@@ -651,6 +677,16 @@
   .checkbox-icon {
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
+  }
+
+  .checkbox-icon-unchecked::before {
+    content: "";
+    background-color: hsla(0, 0%, 100%, 0.6);
+    border: 1px solid white;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 100%;
+    display: inline-block;
   }
 
   .checkbox-icon-checked::before {
