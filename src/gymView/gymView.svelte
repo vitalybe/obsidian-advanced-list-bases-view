@@ -23,7 +23,7 @@
     config = undefined,
     app,
     renderContext = undefined,
-    component = undefined
+    component = undefined,
   }: {
     entries?: BasesEntry[];
     properties?: BasesPropertyId[];
@@ -252,58 +252,17 @@
       const value = entry.getValue(prop);
       if (!value) return null;
 
-      const valueStr = value.toString();
+      const propParsed = parsePropertyId(prop);
 
-      // Check if this is a dynamic template directive (same as targetView)
-      if (valueStr.startsWith("!dynamic=")) {
-        const templatePath = valueStr.substring("!dynamic=".length);
-        const filePath = entry.file.path;
-
-        try {
-          if (!app) {
-            return {
-              type: "error",
-              prop,
-              message: "App not initialized",
-            };
-          }
-
-          const templateFile = app.vault.getAbstractFileByPath(templatePath);
-          if (templateFile && templateFile instanceof TFile) {
-            const templateContent = await app.vault.read(templateFile);
-            const renderedContent = templateContent.replace(/filePathPlaceholder/g, filePath);
-
-            return {
-              type: "template",
-              prop,
-              templateContent: renderedContent,
-              filePath,
-            };
-          } else {
-            return {
-              type: "error",
-              prop,
-              message: `Template file not found: ${templatePath}`,
-            };
-          }
-        } catch (error: any) {
-          console.error(`Error rendering template for ${filePath}:`, error);
-          return {
-            type: "error",
-            prop,
-            message: `Error: ${error.message}`,
-          };
-        }
-      } else if (valueStr.trim() !== "") {
-        return {
-          type: "property",
-          prop,
-          label: config?.getDisplayName(prop) || prop,
-          value,
-        };
-      }
-
-      return null;
+      // Check if this is a dynamic template directive
+      return {
+        type: "property",
+        propertyFull: prop,
+        propertyName: propParsed.name,
+        propertyType: propParsed.type,
+        label: config?.getDisplayName(prop) || prop,
+        value: value,
+      };
     } catch (error) {
       console.error(`Error processing property ${prop}:`, error);
       return null;
@@ -591,23 +550,12 @@
         </div>
       {:else if display.type === "property" && display.propertyData}
         <!-- Regular property display (non-List types) -->
-        {#if display.propertyData.type === "template"}
-          <div class="property-display">
-            <div
-              class="template"
-              use:renderMarkdown={{ content: display.propertyData.templateContent, filePath: display.propertyData.filePath }}
-            ></div>
-          </div>
-        {:else if display.propertyData.type === "property"}
+        {#if display.propertyData.type === "property"}
           <div class="property-display">
             <div class="property">
               <span class="property-label">{display.propertyData.label}</span>
               <span class="property-value" use:renderPropertyValue={display.propertyData.value}></span>
             </div>
-          </div>
-        {:else if display.propertyData.type === "error"}
-          <div class="property-display">
-            <div class="error">{display.propertyData.message}</div>
           </div>
         {/if}
       {/if}
@@ -682,11 +630,6 @@
 
   .property-value {
     color: var(--text-muted);
-  }
-
-  .error {
-    color: var(--text-error);
-    font-style: italic;
   }
 
   .exercise-card {
