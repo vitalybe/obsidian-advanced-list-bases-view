@@ -59,8 +59,15 @@
   let expandedExercise = $state<string | null>(null);
 
   // Reactively process entries when they change
+  let effectRunCount = 0;
   $effect(() => {
-    processEntries(entries, properties);
+    effectRunCount++;
+    debugLog(`Effect run #${effectRunCount}: Entries or properties changed, reprocessing...`);
+    if (effectRunCount <= 10) {
+      processEntries(entries, properties);
+    } else {
+      debugLog(`Skipping processing on run #${effectRunCount} to avoid excessive calls.`);
+    }
   });
 
   // Reactively check if today's file exists
@@ -244,7 +251,7 @@
     }
 
     propertyDisplays = displays;
-    debugLog("Processed property displays:", propertyDisplays);
+    // debugLog("Processed property displays:", propertyDisplays);
   }
 
   async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
@@ -337,7 +344,6 @@
 
   function getRecentUniqueValues(exerciseName: string, history: Map<string, number[][]>, currentValues: number[]): number[] {
     const exerciseHistory = history.get(exerciseName);
-    debugLog("history of", exerciseName, exerciseHistory);
     if (!exerciseHistory) return [];
 
     // Flatten all values from history and get unique ones
