@@ -1,7 +1,7 @@
 import { BasesView, QueryController } from "obsidian";
 import type { ViewOption } from "obsidian";
 import { mount, unmount } from "svelte";
-import ListView from "./targetView.svelte";
+import TargetView from "./targetView.svelte";
 
 export const TargetsViewType = "targets-view";
 export class TargetsView extends BasesView {
@@ -58,14 +58,14 @@ export class TargetsView extends BasesView {
 
     try {
       this.debugLog("Creating Svelte component once");
-      this.component = mount(ListView, {
+      this.component = mount(TargetView, {
         target: this.containerEl,
         props: {
           entries: [],
           properties: [],
           config: this.config,
           app: this.app,
-          renderContext: this.app.renderContext || undefined,
+          renderContext: this.app.renderContext,
           component: this,
         },
       });
@@ -94,7 +94,7 @@ export class TargetsView extends BasesView {
       unmount(this.component);
     }
 
-    this.component = mount(ListView, {
+    this.component = mount(TargetView, {
       target: this.containerEl,
       props: {
         entries: entries,

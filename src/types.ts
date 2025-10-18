@@ -1,4 +1,4 @@
-import { type BasesPropertyId } from "obsidian";
+import { Value, type BasesPropertyId } from "obsidian";
 
 export interface PropertyData {
   type: "property";
@@ -6,5 +6,5 @@ export interface PropertyData {
   propertyName: string;
   propertyType: string;
   label: string;
-  value: any;
+  value: Value;
 }

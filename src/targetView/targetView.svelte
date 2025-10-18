@@ -9,27 +9,26 @@
     type FrontMatterCache,
     type RenderContext,
     parsePropertyId,
+    Component,
+    Value,
+    ListValue,
   } from "obsidian";
   import type { PropertyData } from "../types";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
+  import EditableTextarea from "./EditableTextarea.svelte";
   import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
-  // Props with defaults to prevent undefined errors
-  let {
-    entries = [],
-    properties = [],
-    config = undefined,
-    app,
-    renderContext = undefined,
-    component = undefined,
-  }: {
+  interface Props {
     entries?: BasesEntry[];
     properties?: BasesPropertyId[];
     config?: BasesViewConfig;
     app: App;
-    renderContext?: RenderContext;
-    component?: any;
-  } = $props();
+    renderContext: RenderContext;
+    component: Component;
+  }
+
+  // Props with defaults to prevent undefined errors
+  let { entries = [], properties = [], config = undefined, app, renderContext, component }: Props = $props();
 
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
@@ -89,7 +88,7 @@
         propertyName: propParsed.name,
         propertyType: propParsed.type,
         label: config?.getDisplayName(prop) || prop,
-        value,
+        value: value,
       };
     } catch (error) {
       console.error(`Error processing property ${prop}:`, error);
@@ -264,13 +263,14 @@
   }
 
   function isEntryMarkedAsRead(entry: BasesEntry): boolean {
+    debugger;
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return false;
 
-    const targetsDone = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`);
-    if (!targetsDone) return false;
+    const targetsDone: Value & { data: string[] | string } | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
+    if (!targetsDone || !targetsDone.isTruthy()) return false;
 
-    const targetsDoneArray = Array.isArray(targetsDone) ? targetsDone : [targetsDone];
+    const targetsDoneArray = Array.isArray(targetsDone.data) ? targetsDone.data : [targetsDone.data];
     return targetsDoneArray.some((t: any) => t.toString() === activeTarget);
   }
 
@@ -295,12 +295,6 @@
       frontmatter[propertyName] = newValue;
     });
   }
-
-  function getTextAreaRowsCount(content: string): number {
-    const newLines = (content.match(/\n/g) || []).length;
-    const linesPerContent = content.length / 50 + 1;
-    return Math.max(linesPerContent, newLines, 1);
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -321,13 +315,12 @@
         <div class="property">
           <label class="property-label" for={`${entry.file.path}-${propData.propertyFull}`}>{propData.label}</label>
           {#if propData.propertyType === "note"}
-            <textarea
+            <EditableTextarea
+              {renderContext}
               id={`${entry.file.path}-${propData.propertyFull}`}
-              class="property-input"
-              rows={getTextAreaRowsCount(propData.value?.toString() || "1")}
-              value={propData.value?.toString() || ""}
-              onblur={(e) => handlePropertyChange(entry, propData.propertyName, (e.target as HTMLTextAreaElement).value)}
-            ></textarea>
+              value={propData.value}
+              onchange={(newValue) => handlePropertyChange(entry, propData.propertyName, newValue)}
+            />
           {:else}
             <span class="property-value" use:renderPropertyValue={propData.value}></span>
           {/if}
@@ -434,23 +427,6 @@
   .property-label {
     font-weight: bold;
     font-size: 0.9rem;
-  }
-
-  .property-input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background-color: var(--background-primary);
-    color: var(--text-normal);
-    font-family: var(--font-interface);
-    font-size: 0.9rem;
-    resize: vertical;
-  }
-
-  .property-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
   }
 
   .error {
