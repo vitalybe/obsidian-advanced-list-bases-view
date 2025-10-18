@@ -63,7 +63,7 @@
     }
   }
 
-  function renderPropertyValue(element: HTMLElement, value: Value) {
+  function renderPropertyValue(element: HTMLElement, value: Value | undefined) {
     
     if (value && props.renderContext) {
       console.log("Rendering value:", value);
