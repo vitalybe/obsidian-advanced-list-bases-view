@@ -63,11 +63,7 @@
   $effect(() => {
     effectRunCount++;
     debugLog(`Effect run #${effectRunCount}: Entries or properties changed, reprocessing...`);
-    if (effectRunCount <= 10) {
-      processEntries(entries, properties);
-    } else {
-      debugLog(`Skipping processing on run #${effectRunCount} to avoid excessive calls.`);
-    }
+    processEntries(entries, properties);
   });
 
   // Reactively check if today's file exists
@@ -200,12 +196,17 @@
 
     // Extract last_exercise_date from first entry
     const metadata = getEntryFileMetadata(firstEntry);
+    let newExerciseDateValue: DateTime | undefined;
     if (metadata?.frontmatter?.last_exercise_date) {
       const dateStr = metadata.frontmatter.last_exercise_date;
-      lastExerciseDate = DateTime.fromISO(dateStr);
-      debugLog("Last exercise date:", lastExerciseDate.toISO());
+      newExerciseDateValue = DateTime.fromISO(dateStr);
     } else {
-      lastExerciseDate = null;
+      newExerciseDateValue = undefined;
+    }
+
+    if (lastExerciseDate?.valueOf() !== newExerciseDateValue?.valueOf()) {
+      debugLog("Updated lastExerciseDate to:", newExerciseDateValue);
+      lastExerciseDate = newExerciseDateValue || null;
     }
 
     // Aggregate exercise history from all entries
