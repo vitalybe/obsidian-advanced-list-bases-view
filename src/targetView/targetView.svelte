@@ -263,11 +263,10 @@
   }
 
   function isEntryMarkedAsRead(entry: BasesEntry): boolean {
-    debugger;
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return false;
 
-    const targetsDone: Value & { data: string[] | string } | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
+    const targetsDone: (Value & { data: string[] | string }) | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
     if (!targetsDone || !targetsDone.isTruthy()) return false;
 
     const targetsDoneArray = Array.isArray(targetsDone.data) ? targetsDone.data : [targetsDone.data];

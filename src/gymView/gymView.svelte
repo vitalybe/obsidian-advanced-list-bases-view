@@ -13,25 +13,29 @@
     type RenderContext,
     ListValue,
   } from "obsidian";
+  import type { Writable } from "svelte/store";
   import type { PropertyData } from "../types";
-  import { debug } from "console";
 
   // Props with defaults to prevent undefined errors
   let {
-    entries = [],
-    properties = [],
+    entries: entriesStore,
+    properties: propertiesStore,
     config = undefined,
     app,
     renderContext = undefined,
     component = undefined,
   }: {
-    entries?: BasesEntry[];
-    properties?: BasesPropertyId[];
+    entries: Writable<BasesEntry[]>;
+    properties: Writable<BasesPropertyId[]>;
     config?: BasesViewConfig;
     app: App;
     renderContext?: RenderContext;
     component?: any;
   } = $props();
+
+  // Subscribe to stores to get reactive values
+  let entries = $derived($entriesStore);
+  let properties = $derived($propertiesStore);
 
   // Exercise data structure (for List-type properties)
   interface ExerciseData {
@@ -488,29 +492,6 @@
           </div>
 
           {#if isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
-            <!-- Current values with remove buttons -->
-            <div class="current-values">
-              <span class="section-label">Current values:</span>
-              {#if display.exerciseData.currentValues.length > 0}
-                <div class="values-list">
-                  {#each display.exerciseData.currentValues as value, index}
-                    <div class="value-item">
-                      <span class="value-text">{value}</span>
-                      <button
-                        class="btn-remove"
-                        onclick={() => handleRemoveValue(display.exerciseData, index)}
-                        title="Remove this value"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <p class="empty-text">No values recorded yet</p>
-              {/if}
-            </div>
-
             <!-- Recent options as radio buttons -->
             {#if display.exerciseData.recentOptions.length > 0}
               <div class="recent-options">
@@ -551,7 +532,29 @@
                 >
                   Submit
                 </button>
+                <!-- Current values with remove buttons -->
               </div>
+            </div>
+            <div class="current-values">
+              <span class="section-label">Current values:</span>
+              {#if display.exerciseData.currentValues.length > 0}
+                <div class="values-list">
+                  {#each display.exerciseData.currentValues as value, index}
+                    <div class="value-item">
+                      <span class="value-text">{value}</span>
+                      <button
+                        class="btn-remove"
+                        onclick={() => handleRemoveValue(display.exerciseData, index)}
+                        title="Remove this value"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="empty-text">No values recorded yet</p>
+              {/if}
             </div>
           {/if}
         </div>
@@ -580,7 +583,6 @@
   }
 
   .header-section {
-    margin-bottom: 1.5rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--background-modifier-border);
   }
@@ -640,6 +642,9 @@
   }
 
   .exercise-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
     margin-bottom: 1rem;
     padding: 1rem;
     border: 1px solid var(--background-modifier-border);
@@ -718,10 +723,6 @@
     font-size: 0.95rem;
   }
 
-  .current-values {
-    margin-bottom: 1.5rem;
-  }
-
   .values-list {
     display: flex;
     flex-wrap: wrap;
@@ -770,10 +771,6 @@
     margin: 0;
   }
 
-  .recent-options {
-    margin-bottom: 1.5rem;
-  }
-
   .radio-group {
     display: flex;
     flex-wrap: wrap;
@@ -799,10 +796,6 @@
 
   .radio-label input[type="radio"] {
     cursor: pointer;
-  }
-
-  .custom-input {
-    margin-bottom: 0.5rem;
   }
 
   .input-row {
