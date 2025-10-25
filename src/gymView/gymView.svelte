@@ -326,8 +326,7 @@
   function aggregateExerciseHistory(entries: BasesEntry[]): Map<string, number[][]> {
     const history = new Map<string, number[][]>();
 
-    // Skip the first entry (that's the one we're editing) and process the rest
-    for (let i = 1; i < entries.length; i++) {
+    for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const metadata = getEntryFileMetadata(entry);
 
@@ -493,46 +492,40 @@
 
           {#if isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
             <!-- Recent options as radio buttons -->
-            {#if display.exerciseData.recentOptions.length > 0}
-              <div class="recent-options">
-                <span class="section-label">Recent values:</span>
-                <div class="radio-group">
-                  {#each display.exerciseData.recentOptions as option}
-                    <label class="radio-label">
-                      <input
-                        type="radio"
-                        name={`exercise-${display.exerciseData.prop}`}
-                        value={option}
-                        checked={selectedValues.get(display.exerciseData.prop) === option.toString()}
-                        onchange={() =>
-                          display.exerciseData ? handleRadioChange(display.exerciseData.prop, option.toString()) : undefined}
-                      />
-                      <span>{option}</span>
-                    </label>
-                  {/each}
+            <div class="recent-options">
+              <span class="section-label">Recent values:</span>
+              <div class="radio-group">
+                {#each display.exerciseData.recentOptions as option}
+                  <label class="radio-label">
+                    <input
+                      type="radio"
+                      name={`exercise-${display.exerciseData.prop}`}
+                      value={option}
+                      checked={selectedValues.get(display.exerciseData.prop) === option.toString()}
+                      onchange={() =>
+                        display.exerciseData ? handleRadioChange(display.exerciseData.prop, option.toString()) : undefined}
+                    />
+                    <span>{option}</span>
+                  </label>
+                {/each}
+                <div class="radio-label">
+                  <input
+                    type="text"
+                    class="text-input"
+                    placeholder="Enter new value..."
+                    value={customValues.get(display.exerciseData.prop) || ""}
+                    oninput={(e) =>
+                      display.exerciseData
+                        ? handleCustomValueChange(display.exerciseData.prop, e.currentTarget.value)
+                        : undefined}
+                  />
                 </div>
-              </div>
-            {/if}
-
-            <!-- Custom value input -->
-            <div class="custom-input">
-              <span class="section-label">New value:</span>
-              <div class="input-row">
-                <input
-                  type="text"
-                  class="text-input"
-                  placeholder="Enter new value..."
-                  value={customValues.get(display.exerciseData.prop) || ""}
-                  oninput={(e) =>
-                    display.exerciseData ? handleCustomValueChange(display.exerciseData.prop, e.currentTarget.value) : undefined}
-                />
                 <button
                   class="btn-submit"
                   onclick={() => (display.exerciseData ? handleAddValue(display.exerciseData) : undefined)}
                 >
                   Submit
                 </button>
-                <!-- Current values with remove buttons -->
               </div>
             </div>
             <div class="current-values">
@@ -775,6 +768,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
+    align-items: center;
   }
 
   .radio-label {
