@@ -449,6 +449,42 @@
   function isExerciseExpanded(expandedExercise: string | null, exerciseProp: string): boolean {
     return expandedExercise === exerciseProp;
   }
+
+  function getExerciseHistory(exerciseName: string, entries: BasesEntry[]): number[] {
+    const allValues: number[] = [];
+    for (const entry of entries) {
+      const metadata = getEntryFileMetadata(entry);
+      if (!metadata?.frontmatter) continue;
+      const value = metadata.frontmatter[exerciseName];
+      if (value) {
+        const valueArray = Array.isArray(value) ? value : [value];
+        allValues.push(...valueArray.map((v) => sanitizeValue(v)));
+      }
+    }
+    return allValues;
+  }
+
+  function getColorForValue(value: number, minValue: number, maxValue: number): string {
+    // Create a gradient from pastel-red (light) to pastel-green (heavy)
+    if (maxValue === minValue) {
+      // If all values are the same, use middle color (pastel yellow)
+      return "hsl(60, 70%, 72%)";
+    }
+
+    const normalized = (value - minValue) / (maxValue - minValue); // 0 to 1
+    // Red: hsl(0, 70%, 72%) to Green: hsl(120, 70%, 72%)
+    const hue = normalized * 120; // 0 (red) to 120 (green)
+    return `hsl(${hue}, 70%, 72%)`;
+  }
+
+  function getBarWidth(value: number, minValue: number, maxValue: number): number {
+    // Scale value to height with minimum for text visibility
+    if (maxValue === minValue) {
+      return 32; // Middle height if all values are same
+    }
+    const normalized = (value - minValue) / (maxValue - minValue);
+    return 28 + normalized * 72; // Min 28px, max 100px
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -549,6 +585,33 @@
                 <p class="empty-text">No values recorded yet</p>
               {/if}
             </div>
+
+            <!-- Mini-graph showing exercise history -->
+            {#if display.exerciseData}
+              {@const history = getExerciseHistory(display.exerciseData.prop, entries)}
+              {#if history.length > 0}
+                <div class="mini-graph-section">
+                  <span class="section-label">History:</span>
+                  <div class="mini-graph">
+                    {#each history as value}
+                      {@const minVal = Math.min(...history)}
+                      {@const maxVal = Math.max(...history)}
+                      <div
+                        class="mini-bar"
+                        style="width: {getBarWidth(value, minVal, maxVal)}px; background-color: {getColorForValue(
+                          value,
+                          minVal,
+                          maxVal
+                        )};"
+                        title={value.toString()}
+                      >
+                        <span class="bar-value">{value}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/if}
           {/if}
         </div>
       {:else if display.type === "property" && display.propertyData}
@@ -830,5 +893,51 @@
 
   .btn-submit:active {
     transform: scale(0.98);
+  }
+
+  .mini-graph-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--background-modifier-border);
+  }
+
+  .mini-graph {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0.5rem 0;
+    overflow-x: auto;
+  }
+
+  .mini-bar {
+    width: 3px;
+    min-width: 3px;
+    border-radius: 2px;
+    transition:
+      opacity 0.2s,
+      transform 0.2s;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .mini-bar:hover {
+    opacity: 0.85;
+    transform: scale(1.1);
+  }
+
+  .bar-value {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-normal);
+    writing-mode: horizontal-tb;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  .mini-bar:hover .bar-value {
+    opacity: 1;
   }
 </style>
