@@ -485,6 +485,10 @@
     const normalized = (value - minValue) / (maxValue - minValue);
     return 28 + normalized * 72; // Min 28px, max 100px
   }
+
+  function getExerciseSetCount(exercise: PropertyDisplay) {
+    return exercise.exerciseData?.currentValues.length ?? 0;
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -503,7 +507,12 @@
     {#each propertyDisplays as display (display.prop)}
       {#if display.type === "exercise" && display.exerciseData}
         <!-- Exercise form for List-type properties -->
-        <div class="exercise-card" class:collapsed={!isExerciseExpanded(expandedExercise, display.exerciseData.prop)}>
+        <div
+          class="exercise-card"
+          class:collapsed={!isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
+          class:exercise-started={getExerciseSetCount(display) > 0}
+          class:exercise-finished={getExerciseSetCount(display) >= 3}
+        >
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -515,9 +524,7 @@
             <h3 class="exercise-name">
               <span class="exercise-title">
                 {display.exerciseData.label}
-                {#if !isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
-                  <span class="sets-count">({display.exerciseData.currentValues.length} sets)</span>
-                {/if}
+                <span class="sets-count">({getExerciseSetCount(display)} sets)</span>
               </span>
               {#if showTimer && isExerciseExpanded(expandedExercise, display.exerciseData.prop)}
                 <span class="timer">{elapsedTime}</span>
@@ -749,6 +756,14 @@
     gap: 0.5rem;
   }
 
+  .exercise-started {
+    background-color: hsl(58, 73%, 95%);
+  }
+
+  .exercise-finished {
+    background-color: hsl(120, 73%, 95%);
+  }
+
   .sets-count {
     font-size: 0.9rem;
     font-weight: 400;
@@ -855,12 +870,7 @@
     cursor: pointer;
   }
 
-  .input-row {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .text-input {
+  text-input {
     flex: 1;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--background-modifier-border);
