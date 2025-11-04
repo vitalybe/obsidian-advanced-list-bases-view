@@ -1,6 +1,7 @@
-import { BasesView, QueryController } from "obsidian";
-import type { ViewOption } from "obsidian";
+import { BasesView, QueryController, type BasesEntry } from "obsidian";
+import type { BasesPropertyId, ViewOption } from "obsidian";
 import { mount, unmount } from "svelte";
+import { writable, type Writable } from "svelte/store";
 import TargetView from "./targetView.svelte";
 
 export const TargetsViewType = "targets-view";
@@ -8,6 +9,8 @@ export class TargetsView extends BasesView {
   type = TargetsViewType;
   containerEl: HTMLElement;
   private component?: Record<string, any>;
+  private entriesStore: Writable<BasesEntry[]>;
+  private propertiesStore: Writable<BasesPropertyId[]>;
 
   private debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView] ${message}`, ...args);
@@ -16,6 +19,9 @@ export class TargetsView extends BasesView {
   constructor(controller: QueryController, scrollEl: HTMLElement) {
     super(controller);
     this.containerEl = scrollEl.createDiv({ cls: "is-loading", attr: { tabIndex: 0 } });
+    // Initialize stores with empty data
+    this.entriesStore = writable([]);
+    this.propertiesStore = writable([]);
   }
 
   onload(): void {
@@ -61,8 +67,8 @@ export class TargetsView extends BasesView {
       this.component = mount(TargetView, {
         target: this.containerEl,
         props: {
-          entries: [],
-          properties: [],
+          entries: this.entriesStore,
+          properties: this.propertiesStore,
           config: this.config,
           app: this.app,
           renderContext: this.app.renderContext,
@@ -81,6 +87,10 @@ export class TargetsView extends BasesView {
       return;
     }
 
+    if (!this.component) {
+      this.initializeComponent();
+    }
+
     const entries = this.data.data;
     const properties = this.config?.getOrder() || [];
 
@@ -89,22 +99,9 @@ export class TargetsView extends BasesView {
       properties: properties.length,
     });
 
-    // In Svelte 5, unmount and remount with new props
-    if (this.component) {
-      unmount(this.component);
-    }
-
-    this.component = mount(TargetView, {
-      target: this.containerEl,
-      props: {
-        entries: entries,
-        properties: properties,
-        config: this.config,
-        app: this.app,
-        renderContext: this.app.renderContext || undefined,
-        component: this,
-      },
-    });
+    // Update stores - component stays mounted and reacts to changes
+    this.entriesStore.set(entries);
+    this.propertiesStore.set(properties);
   }
 
   static getViewOptions(): ViewOption[] {

@@ -68,6 +68,13 @@
   }
 
   function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
+    // Mark as user-interacted to prevent auto-collapse
+    userHasInteracted = true;
+    // Auto-expand if collapsed when user modifies targets
+    if (!isExpanded) {
+      isExpanded = true;
+    }
+    
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targets = (frontmatter[propertyName] as string[]) ?? [];
       const index = targets.indexOf(target.value);
@@ -91,6 +98,13 @@
   }
 
   function handleGroupClick(entry: BasesEntry, group: GroupsEnum) {
+    // Mark as user-interacted to prevent auto-collapse
+    userHasInteracted = true;
+    // Auto-expand if collapsed when user modifies targets
+    if (!isExpanded) {
+      isExpanded = true;
+    }
+    
     const members = getGroupMembers(group);
     const isFullySelected = isGroupFullySelected(entry, group);
 

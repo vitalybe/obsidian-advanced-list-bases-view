@@ -14,13 +14,14 @@
     ListValue,
   } from "obsidian";
   import type { PropertyData } from "../types";
+  import type { Writable } from "svelte/store";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
   import EditableTextarea from "./EditableTextarea.svelte";
   import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
 
   interface Props {
-    entries?: BasesEntry[];
-    properties?: BasesPropertyId[];
+    entries: Writable<BasesEntry[]>;
+    properties: Writable<BasesPropertyId[]>;
     config?: BasesViewConfig;
     app: App;
     renderContext: RenderContext;
@@ -28,7 +29,11 @@
   }
 
   // Props with defaults to prevent undefined errors
-  let { entries = [], properties = [], config = undefined, app, renderContext, component }: Props = $props();
+  let { entries: entriesStore, properties: propertiesStore, config = undefined, app, renderContext, component }: Props = $props();
+
+  // Subscribe to stores to get reactive values
+  let entries = $derived($entriesStore);
+  let properties = $derived($propertiesStore);
 
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
