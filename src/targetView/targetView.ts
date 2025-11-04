@@ -4,13 +4,17 @@ import { mount, unmount } from "svelte";
 import { writable, type Writable } from "svelte/store";
 import TargetView from "./targetView.svelte";
 
+export interface TargetViewStoreData {
+  entries: BasesEntry[];
+  properties: BasesPropertyId[];
+}
+
 export const TargetsViewType = "targets-view";
 export class TargetsView extends BasesView {
   type = TargetsViewType;
   containerEl: HTMLElement;
   private component?: Record<string, any>;
-  private entriesStore: Writable<BasesEntry[]>;
-  private propertiesStore: Writable<BasesPropertyId[]>;
+  private targetViewStore: Writable<TargetViewStoreData>;
 
   private debugLog(message: string, ...args: unknown[]): void {
     console.log(`[ListAdvancedView] ${message}`, ...args);
@@ -19,9 +23,8 @@ export class TargetsView extends BasesView {
   constructor(controller: QueryController, scrollEl: HTMLElement) {
     super(controller);
     this.containerEl = scrollEl.createDiv({ cls: "is-loading", attr: { tabIndex: 0 } });
-    // Initialize stores with empty data
-    this.entriesStore = writable([]);
-    this.propertiesStore = writable([]);
+    // Initialize store with empty data
+    this.targetViewStore = writable({ entries: [], properties: [] });
   }
 
   onload(): void {
@@ -67,8 +70,7 @@ export class TargetsView extends BasesView {
       this.component = mount(TargetView, {
         target: this.containerEl,
         props: {
-          entries: this.entriesStore,
-          properties: this.propertiesStore,
+          targetViewStore: this.targetViewStore,
           config: this.config,
           app: this.app,
           renderContext: this.app.renderContext,
@@ -99,9 +101,8 @@ export class TargetsView extends BasesView {
       properties: properties.length,
     });
 
-    // Update stores - component stays mounted and reacts to changes
-    this.entriesStore.set(entries);
-    this.propertiesStore.set(properties);
+    // Update store - component stays mounted and reacts to changes
+    this.targetViewStore.set({ entries, properties });
   }
 
   static getViewOptions(): ViewOption[] {

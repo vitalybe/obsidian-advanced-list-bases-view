@@ -18,10 +18,10 @@
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
   import EditableTextarea from "./EditableTextarea.svelte";
   import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
+  import type { TargetViewStoreData } from "./targetView.ts";
 
   interface Props {
-    entries: Writable<BasesEntry[]>;
-    properties: Writable<BasesPropertyId[]>;
+    targetViewStore: Writable<TargetViewStoreData>;
     config?: BasesViewConfig;
     app: App;
     renderContext: RenderContext;
@@ -29,11 +29,12 @@
   }
 
   // Props with defaults to prevent undefined errors
-  let { entries: entriesStore, properties: propertiesStore, config = undefined, app, renderContext, component }: Props = $props();
+  let { targetViewStore, config = undefined, app, renderContext, component }: Props = $props();
 
-  // Subscribe to stores to get reactive values
-  let entries = $derived($entriesStore);
-  let properties = $derived($propertiesStore);
+  // Subscribe to store to get reactive values
+  let storeData = $derived($targetViewStore);
+  let entries = $derived(storeData.entries);
+  let properties = $derived(storeData.properties);
 
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";

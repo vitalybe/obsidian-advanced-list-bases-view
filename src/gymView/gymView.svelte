@@ -870,21 +870,6 @@
     cursor: pointer;
   }
 
-  text-input {
-    flex: 1;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background-color: var(--background-primary);
-    color: var(--text-normal);
-    font-size: 0.95rem;
-  }
-
-  .text-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-  }
-
   .btn-submit {
     padding: 0.5rem 1rem;
     border: none;
