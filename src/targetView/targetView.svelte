@@ -52,6 +52,9 @@
   let activeTarget = $state<string | undefined>(undefined);
   let activeTargetLabel = $state<string | undefined>(undefined);
 
+  // Filter state: "all", "filled", "empty"
+  let targetFilter = $state<"all" | "filled" | "empty">("all");
+
   // Reactively process entries when they change
   $effect(() => {
     processEntries(entries, properties);
@@ -78,6 +81,9 @@
     activeTarget = getActiveFileTarget();
     activeTargetLabel = getActiveFileTargetLabel();
     debugLog("Updated activeTarget:", activeTarget, activeTargetLabel);
+
+    // Update filter state from file frontmatter
+    updateFilterStateFromFile();
   }
 
   async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
@@ -181,6 +187,25 @@
     const target = ALL_TARGETS.find((t) => t.value === targetValue);
 
     return target ? formatTarget(target) : undefined;
+  }
+
+  function updateFilterStateFromFile() {
+    const activeFileMetadata = getActiveFileMetadata();
+    if (!activeFileMetadata?.frontmatter) {
+      targetFilter = "all";
+      return;
+    }
+
+    const showHasTargets = activeFileMetadata.frontmatter["check_show_has_targets"] as boolean | undefined;
+    const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
+
+    if (showHasTargets && showEmptyTargets) {
+      targetFilter = "all";
+    } else if (showHasTargets) {
+      targetFilter = "filled";
+    } else if (showEmptyTargets) {
+      targetFilter = "empty";
+    }
   }
 
   function openRedditUrl(entry: BasesEntry) {
@@ -288,9 +313,36 @@
     return areTargetsEmpty;
   }
 
+  function handleTargetFilterChange(event: Event) {
+    const radio = event.target as HTMLInputElement;
+    const filterValue = radio.value as "all" | "filled" | "empty";
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      if (filterValue === "all") {
+        // Show all - set both to false
+        frontmatter["check_show_has_targets"] = true;
+        frontmatter["check_show_empty_targets"] = true;
+      } else if (filterValue === "filled") {
+        // Show filled targets only
+        frontmatter["check_show_has_targets"] = true;
+        frontmatter["check_show_empty_targets"] = false;
+      } else if (filterValue === "empty") {
+        // Show empty targets only
+        frontmatter["check_show_has_targets"] = false;
+        frontmatter["check_show_empty_targets"] = true;
+      }
+    });
+
+    // Update local state
+    targetFilter = filterValue;
+  }
+
   function getEntryClasses(entry: BasesEntry): string {
     return [
-      getBooleanValue(entry, "formula.fnzTargetItemShouldShow") === false ? "entry-about-to-disappear" : "",
+      getBooleanValue(entry, "formula.fnzShouldShowRulesCombined") === false ? "entry-about-to-disappear" : "",
       getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
     ].join(" ");
   }
@@ -312,6 +364,42 @@
         <option value={target.value}>{formatTarget(target)}</option>
       {/each}
     </select>
+
+    <div class="target-filter-group">
+      <span class="filter-label">Show:</span>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="target-filter"
+            value="all"
+            checked={targetFilter === "all"}
+            onchange={handleTargetFilterChange}
+          />
+          <span>All</span>
+        </label>
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="target-filter"
+            value="filled"
+            checked={targetFilter === "filled"}
+            onchange={handleTargetFilterChange}
+          />
+          <span>Filled Targets</span>
+        </label>
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="target-filter"
+            value="empty"
+            checked={targetFilter === "empty"}
+            onchange={handleTargetFilterChange}
+          />
+          <span>Empty Targets</span>
+        </label>
+      </div>
+    </div>
   </div>
 
   {#each entryData as { entry, baseProperties: props }, index (entry.file.path)}
@@ -398,6 +486,45 @@
   .target-selector select:focus {
     outline: none;
     border-color: var(--interactive-accent);
+  }
+
+  .target-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 1rem;
+    padding-left: 1rem;
+    border-left: 1px solid var(--background-modifier-border);
+  }
+
+  .filter-label {
+    font-weight: 500;
+    color: var(--text-normal);
+    white-space: nowrap;
+  }
+
+  .radio-group {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-normal);
+  }
+
+  .radio-label input[type="radio"] {
+    cursor: pointer;
+    accent-color: var(--interactive-accent);
+  }
+
+  .radio-label:hover {
+    color: var(--text-accent);
   }
 
   .entry {
