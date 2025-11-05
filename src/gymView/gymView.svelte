@@ -464,26 +464,102 @@
     return allValues;
   }
 
-  function getColorForValue(value: number, minValue: number, maxValue: number): string {
-    // Create a gradient from pastel-red (light) to pastel-green (heavy)
-    if (maxValue === minValue) {
-      // If all values are the same, use middle color (pastel yellow)
-      return "hsl(60, 70%, 72%)";
-    }
-
-    const normalized = (value - minValue) / (maxValue - minValue); // 0 to 1
-    // Red: hsl(0, 70%, 72%) to Green: hsl(120, 70%, 72%)
-    const hue = normalized * 120; // 0 (red) to 120 (green)
-    return `hsl(${hue}, 70%, 72%)`;
+  // Date-grouped exercise history
+  interface DateGroupedHistory {
+    date: DateTime;
+    dateLabel: string;
+    values: number[];
   }
 
-  function getBarWidth(value: number, minValue: number, maxValue: number): number {
-    // Scale value to height with minimum for text visibility
-    if (maxValue === minValue) {
-      return 32; // Middle height if all values are same
+  function getExerciseHistoryByDate(exerciseName: string, entries: BasesEntry[]): DateGroupedHistory[] {
+    const dateMap = new Map<string, number[]>();
+
+    for (const entry of entries) {
+      const metadata = getEntryFileMetadata(entry);
+      if (!metadata?.frontmatter) continue;
+
+      // Extract date from filename (format: YYYY-MM-DD.md)
+      const filename = entry.file.basename; // Gets filename without extension
+      const dateMatch = filename.match(/^(\d{4}-\d{2}-\d{2})$/);
+
+      if (!dateMatch) {
+        // Fallback to file creation time if filename doesn't match expected format
+        const fileDate = DateTime.fromMillis(entry.file.stat.ctime);
+        const dateKey = fileDate.toISODate();
+        if (!dateKey) continue;
+
+        const value = metadata.frontmatter[exerciseName];
+        if (value) {
+          const valueArray = Array.isArray(value) ? value : [value];
+          const values = valueArray.map((v) => sanitizeValue(v));
+
+          if (!dateMap.has(dateKey)) {
+            dateMap.set(dateKey, []);
+          }
+          dateMap.get(dateKey)!.push(...values);
+        }
+        continue;
+      }
+
+      const dateKey = dateMatch[1]; // YYYY-MM-DD format
+
+      const value = metadata.frontmatter[exerciseName];
+      if (value) {
+        const valueArray = Array.isArray(value) ? value : [value];
+        const values = valueArray.map((v) => sanitizeValue(v));
+
+        if (!dateMap.has(dateKey)) {
+          dateMap.set(dateKey, []);
+        }
+        dateMap.get(dateKey)!.push(...values);
+      }
     }
-    const normalized = (value - minValue) / (maxValue - minValue);
-    return 28 + normalized * 72; // Min 28px, max 100px
+
+    // Convert to array and sort by date (most recent first)
+    const result: DateGroupedHistory[] = Array.from(dateMap.entries())
+      .map(([dateKey, values]) => {
+        const date = DateTime.fromISO(dateKey);
+        return {
+          date,
+          dateLabel: formatDateForDisplay(date.toJSDate()),
+          values,
+        };
+      })
+      .sort((a, b) => b.date.toMillis() - a.date.toMillis());
+
+    return result;
+  }
+
+  function formatDateForDisplay(date: Date): string {
+    // Format as "D MMM" (e.g., "5 Nov")
+    const day = date.getDate();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[date.getMonth()];
+    return `${day} ${month}`;
+  }
+
+  const CHART_SEGMENT_COLORS = ["#CCF1FF", "#E0D7FF", "#FBCCE1", "#FAFFC7", "#D7EEFF"];
+
+  function getColorForValueByRank(value: number, uniqueValues: number[]): string {
+    // Find the rank of this value (smallest = 0, second smallest = 1, etc.)
+    const sortedUnique = [...uniqueValues].sort((a, b) => a - b);
+    const rank = sortedUnique.indexOf(value);
+
+    // If rank is beyond available colors, return white
+    if (rank >= CHART_SEGMENT_COLORS.length) {
+      return "white";
+    }
+
+    return CHART_SEGMENT_COLORS[rank];
+  }
+
+  function getSegmentWidth(value: number, minValue: number, maxValue: number): number {
+    // Scale segment width from 32px (min value = 100%) to 64px (max value = 200%)
+    if (maxValue === minValue) {
+      return 32; // Default width if all values are same
+    }
+    const normalized = (value - minValue) / (maxValue - minValue); // 0 to 1
+    return 32 + normalized * 32; // Min 32px, max 64px
   }
 
   function getExerciseSetCount(exercise: PropertyDisplay) {
@@ -595,24 +671,32 @@
 
             <!-- Mini-graph showing exercise history -->
             {#if display.exerciseData}
-              {@const history = getExerciseHistory(display.exerciseData.prop, entries)}
-              {#if history.length > 0}
+              {@const historyByDate = getExerciseHistoryByDate(display.exerciseData.prop, entries)}
+              {#if historyByDate.length > 0}
+                {@const allValues = historyByDate.flatMap((d) => d.values)}
+                {@const uniqueValues = [...new Set(allValues)]}
+                {@const minVal = allValues.length > 0 ? Math.min(...allValues) : 0}
+                {@const maxVal = allValues.length > 0 ? Math.max(...allValues) : 0}
                 <div class="mini-graph-section">
                   <span class="section-label">History:</span>
                   <div class="mini-graph">
-                    {#each history as value}
-                      {@const minVal = Math.min(...history)}
-                      {@const maxVal = Math.max(...history)}
-                      <div
-                        class="mini-bar"
-                        style="width: {getBarWidth(value, minVal, maxVal)}px; background-color: {getColorForValue(
-                          value,
-                          minVal,
-                          maxVal
-                        )};"
-                        title={value.toString()}
-                      >
-                        <span class="bar-value">{value}</span>
+                    {#each historyByDate as dateGroup}
+                      <div class="date-row">
+                        <span class="date-label">{dateGroup.dateLabel}</span>
+                        <div class="date-segments">
+                          {#each dateGroup.values as value}
+                            <div
+                              class="mini-segment"
+                              style="width: {getSegmentWidth(value, minVal, maxVal)}px; background-color: {getColorForValueByRank(
+                                value,
+                                uniqueValues
+                              )};"
+                              title={value.toString()}
+                            >
+                              <span class="segment-value">{value}</span>
+                            </div>
+                          {/each}
+                        </div>
                       </div>
                     {/each}
                   </div>
@@ -899,15 +983,34 @@
   .mini-graph {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 0.5rem;
     padding: 0.5rem 0;
-    overflow-x: auto;
   }
 
-  .mini-bar {
-    width: 3px;
-    min-width: 3px;
-    border-radius: 2px;
+  .date-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .date-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-normal);
+    min-width: 50px;
+    flex-shrink: 0;
+  }
+
+  .date-segments {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .mini-segment {
+    height: 28px;
+    border-radius: 4px;
     transition:
       opacity 0.2s,
       transform 0.2s;
@@ -916,23 +1019,24 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    padding: 0 0.5rem;
+    flex-shrink: 0;
   }
 
-  .mini-bar:hover {
+  .mini-segment:hover {
     opacity: 0.85;
-    transform: scale(1.1);
+    transform: scale(1.05);
   }
 
-  .bar-value {
-    font-size: 0.65rem;
+  .segment-value {
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-normal);
-    writing-mode: horizontal-tb;
     white-space: nowrap;
-    opacity: 0.7;
+    opacity: 0.9;
   }
 
-  .mini-bar:hover .bar-value {
+  .mini-segment:hover .segment-value {
     opacity: 1;
   }
 </style>
