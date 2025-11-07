@@ -495,6 +495,7 @@
     margin-left: 1rem;
     padding-left: 1rem;
     border-left: 1px solid var(--background-modifier-border);
+    flex-wrap: wrap;
   }
 
   .filter-label {
@@ -507,6 +508,7 @@
     display: flex;
     gap: 1rem;
     align-items: center;
+    flex-wrap: wrap;
   }
 
   .radio-label {
