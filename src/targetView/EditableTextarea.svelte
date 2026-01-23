@@ -15,6 +15,16 @@
   let longPressTimer: number | undefined;
   let component = new Component();
 
+  // Local state to track current value (updated immediately on edit)
+  let currentValue = $state<string>(props.value?.toString() || "");
+
+  // Sync currentValue when props.value changes from parent
+  $effect(() => {
+    if (!isEditMode) {
+      currentValue = props.value?.toString() || "";
+    }
+  });
+
   function getTextAreaRowsCount(content: string | undefined): number {
     if (!content) return 1;
 
@@ -34,8 +44,15 @@
   }
 
   function exitEditMode(event: FocusEvent) {
-    isEditMode = false;
     const newValue = (event.target as HTMLTextAreaElement).value;
+
+    // Update local state immediately
+    currentValue = newValue;
+
+    // Exit edit mode
+    isEditMode = false;
+
+    // Notify parent (async frontmatter update)
     props.onchange(newValue);
   }
 
@@ -64,18 +81,16 @@
     }
   }
 
-  async function renderPropertyValue(element: HTMLElement, value: Value | undefined) {
-    const renderMarkdown = async (val: Value | undefined) => {
+  async function renderPropertyValue(element: HTMLElement, textValue: string) {
+    const renderMarkdown = async (text: string) => {
       element.empty();
 
-      if (!val || !props.renderContext) {
+      if (!props.renderContext) {
         element.setText("");
         return;
       }
 
-      const markdownText = val.toString();
-
-      if (!markdownText || markdownText.trim() === "") {
+      if (!text || text.trim() === "") {
         element.setText("(empty)");
         return;
       }
@@ -83,18 +98,18 @@
       // Render markdown using Obsidian's MarkdownRenderer
       await MarkdownRenderer.render(
         props.renderContext.app,
-        markdownText,
+        text,
         element,
         props.renderContext.sourcePath,
         component
       );
     };
 
-    await renderMarkdown(value);
+    await renderMarkdown(textValue);
 
     return {
-      async update(newValue: any) {
-        await renderMarkdown(newValue);
+      async update(newText: string) {
+        await renderMarkdown(newText);
       },
       destroy() {
         element.empty();
@@ -108,8 +123,8 @@
     bind:this={textareaElement}
     id={props.id}
     class="property-input"
-    rows={getTextAreaRowsCount(props.value?.toString())}
-    value={props.value?.toString() || ""}
+    rows={getTextAreaRowsCount(currentValue)}
+    value={currentValue}
     onblur={exitEditMode}
   ></textarea>
 {:else}
@@ -121,8 +136,8 @@
     ontouchstart={handleTouchStart}
     ontouchend={handleTouchEnd}
     ontouchmove={handleTouchMove}
-    style="min-height: {getTextAreaRowsCount(props.value?.toString()) * 1.5}em;"
-    use:renderPropertyValue={props.value}
+    style="min-height: {getTextAreaRowsCount(currentValue) * 1.5}em;"
+    use:renderPropertyValue={currentValue}
   ></div>
 {/if}
 
