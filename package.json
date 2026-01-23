@@ -20,6 +20,8 @@
   "authorUrl": "https://obsidian.md",
   "license": "MIT",
   "devDependencies": {
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.34.3",
     "@tsconfig/svelte": "^5.0.5",
     "@types/luxon": "^3.7.1",
     "@types/node": "24.6.1",
