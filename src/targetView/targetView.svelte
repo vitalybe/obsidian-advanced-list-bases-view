@@ -46,6 +46,7 @@
       entry: BasesEntry;
       filledProperties: PropertyData[];
       emptyProperties: PropertyData[];
+      fileContent: string;
     }>
   >([]);
 
@@ -58,7 +59,11 @@
 
   // Reactively process entries when they change
   $effect(() => {
-    processEntries(entries, properties);
+    async function processEntriesEffect() {
+      entryData = await processEntries(entries, properties);
+    }
+
+    processEntriesEffect();
   });
 
   function debugLog(message: string, ...args: unknown[]): void {
@@ -115,6 +120,20 @@
     return { filledProperties, emptyProperties };
   }
 
+  async function readFileContent(file: TFile): Promise<string> {
+    try {
+      const content = await app.vault.read(file);
+      // Remove frontmatter if present
+      const frontmatterRegex = /^---\s*\n[\s\S]*?\n---\s*\n/;
+      const contentWithoutFrontmatter = content.replace(frontmatterRegex, "");
+      // Get first 300 characters
+      return contentWithoutFrontmatter.trim().substring(0, 300);
+    } catch (error) {
+      console.error(`Error reading file ${file.path}:`, error);
+      return "";
+    }
+  }
+
   async function processEntry(
     entry: BasesEntry,
     properties: BasesPropertyId[]
@@ -122,23 +141,25 @@
     entry: BasesEntry;
     filledProperties: PropertyData[];
     emptyProperties: PropertyData[];
+    fileContent: string;
   }> {
     const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
     const validProps = props.filter((p) => p !== null) as PropertyData[];
 
     const { filledProperties, emptyProperties } = separatePropertiesByValue(validProps);
+    const fileContent = await readFileContent(entry.file);
 
     return {
       entry,
       filledProperties,
       emptyProperties,
+      fileContent,
     };
   }
 
   async function processEntries(entries: BasesEntry[], properties: BasesPropertyId[]) {
     debugLog("processEntries");
-    const processed = await Promise.all(entries.map((entry) => processEntry(entry, properties)));
-    entryData = processed;
+    const entryData = await Promise.all(entries.map((entry) => processEntry(entry, properties)));
 
     // Update active target info
     activeTarget = getActiveFileTarget();
@@ -147,6 +168,8 @@
 
     // Update filter state from file frontmatter
     updateFilterStateFromFile();
+
+    return entryData;
   }
 
   async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
@@ -170,27 +193,6 @@
       console.error(`Error processing property ${prop}:`, error);
       return null;
     }
-  }
-
-  function renderMarkdown(element: HTMLElement, params: { content: string; filePath: string }) {
-    // Render markdown when element is mounted
-    if (app && component) {
-      MarkdownRenderer.render(app, params.content, element, params.filePath, component);
-    }
-
-    return {
-      update(newParams: { content: string; filePath: string }) {
-        // Clear and re-render if content changes
-        element.empty();
-        if (app && component) {
-          MarkdownRenderer.render(app, newParams.content, element, newParams.filePath, component);
-        }
-      },
-      destroy() {
-        // Clean up if needed
-        element.empty();
-      },
-    };
   }
 
   function getActiveFileMetadata(): FrontMatterCache | undefined {
@@ -448,6 +450,11 @@
       frontmatter[propertyName] = newValue;
     });
   }
+
+  async function handleFileContentClick(entry: BasesEntry) {
+    const leaf = app.workspace.getLeaf(false);
+    await leaf.openFile(entry.file);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -498,7 +505,7 @@
     </div>
   </div>
 
-  {#each entryData as { entry, filledProperties, emptyProperties }, index (entry.file.path)}
+  {#each entryData as { entry, filledProperties, emptyProperties, fileContent }, index (entry.file.path)}
     <div class="entry {getEntryClasses(entry)}">
       {#each filledProperties as propData (propData.propertyFull)}
         <div class="property">
@@ -517,6 +524,21 @@
           {/if}
         </div>
       {/each}
+      {#if fileContent && fileContent.trim().length > 0}
+        <div class="property">
+          <label class="property-label" for={`${entry.file.path}-content`}>Content ({fileContent.length} characters)</label>
+          <EditableTextarea
+            {renderContext}
+            {app}
+            sourcePath={entry.file.path}
+            id={`${entry.file.path}-content`}
+            value={fileContent}
+            readonly={true}
+            onchange={() => {}}
+            onClick={() => handleFileContentClick(entry)}
+          />
+        </div>
+      {/if}
       {#if emptyProperties.length > 0}
         <div class="empty-properties-container">
           {#each emptyProperties as propData (propData.propertyFull)}

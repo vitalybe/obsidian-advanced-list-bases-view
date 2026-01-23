@@ -7,8 +7,10 @@
     sourcePath: string;
 
     id: string;
-    value?: Value;
+    value?: Value | string;
     onchange: (newValue: string) => void;
+    readonly?: boolean;
+    onClick?: () => void;
   }
 
   let props: Props = $props();
@@ -17,13 +19,20 @@
   let longPressTimer: number | undefined;
   let component = new Component();
 
+  // Helper function to extract string value from Value or string
+  function getStringValue(value: Value | string | undefined): string {
+    if (value === undefined) return "";
+    if (typeof value === "string") return value;
+    return value.toString();
+  }
+
   // Local state to track current value (updated immediately on edit)
-  let currentValue = $state<string>(props.value?.toString() || "");
+  let currentValue = $state<string>(getStringValue(props.value));
 
   // Sync currentValue when props.value changes from parent
   $effect(() => {
     if (!isEditMode) {
-      currentValue = props.value?.toString() || "";
+      currentValue = getStringValue(props.value);
     }
   });
 
@@ -36,6 +45,7 @@
   }
 
   function enterEditMode() {
+    if (props.readonly) return; // Don't allow editing in readonly mode
     isEditMode = true;
     // Focus the textarea after it's rendered
     setTimeout(() => {
@@ -59,7 +69,24 @@
   }
 
   function handleDoubleClick() {
-    enterEditMode();
+    if (props.readonly && props.onClick) {
+      props.onClick();
+    } else if (!props.readonly) {
+      enterEditMode();
+    }
+  }
+
+  function handleClick() {
+    if (props.readonly && props.onClick) {
+      props.onClick();
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (props.readonly && props.onClick && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      props.onClick();
+    }
   }
 
   function handleTouchStart() {
@@ -115,7 +142,7 @@
   }
 </script>
 
-{#if isEditMode}
+{#if isEditMode && !props.readonly}
   <textarea
     bind:this={textareaElement}
     id={props.id}
@@ -126,13 +153,15 @@
   ></textarea>
 {:else}
   <div
-    class="property-view"
+    class="property-view {props.readonly ? 'readonly' : ''}"
     role="button"
     tabindex="0"
+    onclick={handleClick}
+    onkeydown={handleKeyDown}
     ondblclick={handleDoubleClick}
-    ontouchstart={handleTouchStart}
-    ontouchend={handleTouchEnd}
-    ontouchmove={handleTouchMove}
+    ontouchstart={props.readonly ? undefined : handleTouchStart}
+    ontouchend={props.readonly ? undefined : handleTouchEnd}
+    ontouchmove={props.readonly ? undefined : handleTouchMove}
     style="min-height: {getTextAreaRowsCount(currentValue) * 1.5}em;"
     use:renderPropertyValue={currentValue}
   ></div>
@@ -238,5 +267,13 @@
   .property-view:focus {
     outline: none;
     border-color: var(--interactive-accent);
+  }
+
+  .property-view.readonly {
+    cursor: pointer;
+  }
+
+  .property-view.readonly:hover {
+    background-color: var(--background-modifier-hover);
   }
 </style>
