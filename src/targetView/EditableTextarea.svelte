@@ -1,7 +1,5 @@
 <script lang="ts">
   import { RenderContext, Value, Component, MarkdownRenderer } from "obsidian";
-  import { EditorView } from "@codemirror/view";
-  import { EditorState } from "@codemirror/state";
 
   interface Props {
     renderContext: RenderContext;
@@ -13,8 +11,7 @@
 
   let props: Props = $props();
   let isEditMode = $state(false);
-  let editorContainer = $state<HTMLDivElement>();
-  let editorView: EditorView | undefined;
+  let textareaElement = $state<HTMLTextAreaElement>();
   let longPressTimer: number | undefined;
   let component = new Component();
 
@@ -26,87 +23,19 @@
     return Math.max(linesPerContent, newLines, 1);
   }
 
-  function createEditor() {
-    if (!editorContainer) return;
-
-    const initialContent = props.value?.toString() || "";
-    const app = props.renderContext.app;
-
-    // Build extensions array
-    const extensions: any[] = [
-      EditorView.lineWrapping,
-      // Handle blur to exit edit mode
-      EditorView.domEventHandlers({
-        blur: (event, view) => {
-          // Small delay to allow click events to process
-          setTimeout(() => {
-            exitEditMode();
-          }, 100);
-          return false;
-        }
-      }),
-      // Use Obsidian's theme
-      EditorView.theme({
-        "&": {
-          fontSize: "var(--font-text-size)",
-          fontFamily: "var(--font-text)",
-        },
-        ".cm-content": {
-          padding: "0.5rem",
-        },
-        ".cm-line": {
-          padding: "0",
-        }
-      })
-    ];
-
-    // Try to get Obsidian's markdown mode
-    try {
-      // @ts-ignore - internal API
-      if (app.vault?.adapter?.basePath) {
-        // Access internal editor extensions if available
-        // @ts-ignore
-        const editorExtensions = app.vault.getConfig?.('editorExtensions');
-        if (Array.isArray(editorExtensions)) {
-          extensions.push(...editorExtensions);
-        }
-      }
-    } catch (e) {
-      console.log("Using basic editor setup (Obsidian extensions not available)");
-    }
-
-    const state = EditorState.create({
-      doc: initialContent,
-      extensions,
-    });
-
-    editorView = new EditorView({
-      state,
-      parent: editorContainer,
-    });
-
-    // Focus the editor
-    editorView.focus();
-  }
-
   function enterEditMode() {
     isEditMode = true;
-    // Create the editor after the container is rendered
+    // Focus the textarea after it's rendered
     setTimeout(() => {
-      createEditor();
+      if (textareaElement) {
+        textareaElement.focus();
+      }
     }, 0);
   }
 
-  function exitEditMode() {
-    if (!editorView) return;
-
+  function exitEditMode(event: FocusEvent) {
     isEditMode = false;
-    const newValue = editorView.state.doc.toString();
-
-    // Destroy the editor
-    editorView.destroy();
-    editorView = undefined;
-
+    const newValue = (event.target as HTMLTextAreaElement).value;
     props.onchange(newValue);
   }
 
@@ -175,11 +104,14 @@
 </script>
 
 {#if isEditMode}
-  <div
-    bind:this={editorContainer}
+  <textarea
+    bind:this={textareaElement}
     id={props.id}
-    class="editor-container"
-  ></div>
+    class="property-input"
+    rows={getTextAreaRowsCount(props.value?.toString())}
+    value={props.value?.toString() || ""}
+    onblur={exitEditMode}
+  ></textarea>
 {:else}
   <div
     class="property-view"
@@ -195,26 +127,20 @@
 {/if}
 
 <style>
-  .editor-container {
+  .property-input {
     width: 100%;
+    padding: 0.5rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
-    background-color: var(--background-primary);
-    min-height: 3em;
-  }
-
-  .editor-container :global(.cm-editor) {
     background-color: var(--background-primary);
     color: var(--text-normal);
     font-family: var(--font-text);
     font-size: var(--font-text-size);
+    resize: vertical;
   }
 
-  .editor-container :global(.cm-focused) {
+  .property-input:focus {
     outline: none;
-  }
-
-  .editor-container:has(:global(.cm-focused)) {
     border-color: var(--interactive-accent);
   }
 
