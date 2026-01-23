@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { RenderContext, Value, Component, MarkdownRenderer } from "obsidian";
+  import { RenderContext, Value, Component, MarkdownRenderer, type App } from "obsidian";
 
   interface Props {
     renderContext: RenderContext;
+    app: App;
+    sourcePath: string;
 
     id: string;
     value?: Value;
@@ -81,35 +83,30 @@
     }
   }
 
-  async function renderPropertyValue(element: HTMLElement, textValue: string) {
-    const renderMarkdown = async (text: string) => {
+  function renderPropertyValue(element: HTMLElement, textValue: string) {
+    const renderMarkdown = (text: string) => {
       element.empty();
-
-      if (!props.renderContext) {
-        element.setText("");
-        return;
-      }
 
       if (!text || text.trim() === "") {
         element.setText("(empty)");
         return;
       }
 
-      // Render markdown using Obsidian's MarkdownRenderer
-      await MarkdownRenderer.render(
-        props.renderContext.app,
+      // Render markdown using Obsidian's MarkdownRenderer (async, but we don't await)
+      MarkdownRenderer.render(
+        props.app,
         text,
         element,
-        props.renderContext.sourcePath,
+        props.sourcePath,
         component
       );
     };
 
-    await renderMarkdown(textValue);
+    renderMarkdown(textValue);
 
     return {
-      async update(newText: string) {
-        await renderMarkdown(newText);
+      update(newText: string) {
+        renderMarkdown(newText);
       },
       destroy() {
         element.empty();

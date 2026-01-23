@@ -410,6 +410,8 @@
           {#if propData.propertyType === "note"}
             <EditableTextarea
               {renderContext}
+              {app}
+              sourcePath={entry.file.path}
               id={`${entry.file.path}-${propData.propertyFull}`}
               value={propData.value}
               onchange={(newValue) => handlePropertyChange(entry, propData.propertyName, newValue)}
