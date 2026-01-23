@@ -44,7 +44,8 @@
   let entryData = $state<
     Array<{
       entry: BasesEntry;
-      baseProperties: PropertyData[];
+      filledProperties: PropertyData[];
+      emptyProperties: PropertyData[];
     }>
   >([]);
 
@@ -64,17 +65,79 @@
     console.log(`[ListAdvancedView ListView.svelte] ${message}`, ...args);
   }
 
+  function isPropertyValueFilled(value: Value): boolean {
+    if (!value) return false;
+
+    // Check if it's truthy
+    if (!value.isTruthy()) return false;
+
+    // Check if it's an empty list
+    if (value instanceof ListValue) {
+      return value.length() > 0;
+    }
+
+    // Check if it's an empty string by converting to string
+    const stringValue = value.toString();
+    if (stringValue.trim().length === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function isPropertyValueEmpty(value: Value): boolean {
+    if (!value) return true;
+
+    // Check if it's falsy
+    if (!value.isTruthy()) return true;
+
+    // Check if it's an empty list
+    if (value instanceof ListValue) {
+      return value.length() === 0;
+    }
+
+    // Check if it's an empty string by converting to string
+    const stringValue = value.toString();
+    if (stringValue.trim().length === 0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function separatePropertiesByValue(properties: PropertyData[]): {
+    filledProperties: PropertyData[];
+    emptyProperties: PropertyData[];
+  } {
+    const filledProperties = properties.filter((p) => isPropertyValueFilled(p.value));
+    const emptyProperties = properties.filter((p) => isPropertyValueEmpty(p.value));
+
+    return { filledProperties, emptyProperties };
+  }
+
+  async function processEntry(
+    entry: BasesEntry,
+    properties: BasesPropertyId[]
+  ): Promise<{
+    entry: BasesEntry;
+    filledProperties: PropertyData[];
+    emptyProperties: PropertyData[];
+  }> {
+    const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
+    const validProps = props.filter((p) => p !== null) as PropertyData[];
+
+    const { filledProperties, emptyProperties } = separatePropertiesByValue(validProps);
+
+    return {
+      entry,
+      filledProperties,
+      emptyProperties,
+    };
+  }
+
   async function processEntries(entries: BasesEntry[], properties: BasesPropertyId[]) {
     debugLog("processEntries");
-    const processed = await Promise.all(
-      entries.map(async (entry) => {
-        const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
-        return {
-          entry,
-          baseProperties: props.filter((p) => p !== null) as PropertyData[],
-        };
-      })
-    );
+    const processed = await Promise.all(entries.map((entry) => processEntry(entry, properties)));
     entryData = processed;
 
     // Update active target info
@@ -89,11 +152,12 @@
   async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
     try {
       const value = entry.getValue(prop);
-      if (!value) return null;
+      // Return null only if property doesn't exist, not if it's empty
+      if (value === null || value === undefined) return null;
 
       const propParsed = parsePropertyId(prop);
 
-      // Check if this is a dynamic template directive
+      // Return property data even if value is empty
       return {
         type: "property",
         propertyFull: prop,
@@ -189,6 +253,20 @@
     return target ? formatTarget(target) : undefined;
   }
 
+  function determineFilterState(
+    showHasTargets: boolean | undefined,
+    showEmptyTargets: boolean | undefined
+  ): "all" | "filled" | "empty" {
+    if (showHasTargets && showEmptyTargets) {
+      return "all";
+    } else if (showHasTargets) {
+      return "filled";
+    } else if (showEmptyTargets) {
+      return "empty";
+    }
+    return "all";
+  }
+
   function updateFilterStateFromFile() {
     const activeFileMetadata = getActiveFileMetadata();
     if (!activeFileMetadata?.frontmatter) {
@@ -199,13 +277,7 @@
     const showHasTargets = activeFileMetadata.frontmatter["check_show_has_targets"] as boolean | undefined;
     const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
 
-    if (showHasTargets && showEmptyTargets) {
-      targetFilter = "all";
-    } else if (showHasTargets) {
-      targetFilter = "filled";
-    } else if (showEmptyTargets) {
-      targetFilter = "empty";
-    }
+    targetFilter = determineFilterState(showHasTargets, showEmptyTargets);
   }
 
   function openRedditUrl(entry: BasesEntry) {
@@ -235,6 +307,27 @@
     }, 100);
   }
 
+  function normalizeTargetsArray(targets: unknown[] | unknown): string[] {
+    if (Array.isArray(targets)) {
+      return targets;
+    }
+    return targets ? [targets.toString()] : [];
+  }
+
+  function toggleTargetInArray(targets: string[], target: string, shouldRemove: boolean): string[] {
+    if (shouldRemove) {
+      const index = targets.indexOf(target);
+      if (index > -1) {
+        targets.splice(index, 1);
+      }
+    } else {
+      if (!targets.includes(target)) {
+        targets.push(target);
+      }
+    }
+    return targets;
+  }
+
   function handleMarkAsRead(entry: BasesEntry) {
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return;
@@ -243,22 +336,9 @@
 
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targetsOriginal = (frontmatter[TARGETS_DONE_PROPERTY] as unknown[] | unknown) ?? [];
-      const targets = Array.isArray(targetsOriginal) ? targetsOriginal : [targetsOriginal.toString()];
-
-      if (isRead) {
-        // Remove the target (mark as unread)
-        const index = targets.indexOf(activeTarget);
-        if (index > -1) {
-          targets.splice(index, 1);
-        }
-      } else {
-        // Add the target (mark as read)
-        if (!targets.includes(activeTarget)) {
-          targets.push(activeTarget);
-        }
-      }
-
-      frontmatter[TARGETS_DONE_PROPERTY] = targets;
+      const targets = normalizeTargetsArray(targetsOriginal);
+      const updatedTargets = toggleTargetInArray(targets, activeTarget, isRead);
+      frontmatter[TARGETS_DONE_PROPERTY] = updatedTargets;
     });
   }
 
@@ -270,13 +350,7 @@
     });
   }
 
-  function handleFilterSelect(event: Event) {
-    const select = event.target as HTMLSelectElement;
-    const selectedTarget = select.value;
-
-    const activeFile = app.workspace.activeEditor?.file;
-    if (!activeFile) return;
-
+  function updateTargetProperty(activeFile: TFile, selectedTarget: string) {
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
@@ -288,19 +362,36 @@
     });
   }
 
+  function handleFilterSelect(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const selectedTarget = select.value;
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    updateTargetProperty(activeFile, selectedTarget);
+  }
+
   function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
     const value: { data: boolean } | undefined = entry.getValue(prop) as any;
     return value?.data ?? false;
+  }
+
+  function extractTargetsDoneArray(entry: BasesEntry): string[] {
+    const targetsDone: (Value & { data: string[] | string }) | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
+
+    if (!targetsDone || !targetsDone.isTruthy()) {
+      return [];
+    }
+
+    return Array.isArray(targetsDone.data) ? targetsDone.data : [targetsDone.data];
   }
 
   function isEntryMarkedAsRead(entry: BasesEntry): boolean {
     const activeTarget = getActiveFileTarget();
     if (!activeTarget) return false;
 
-    const targetsDone: (Value & { data: string[] | string }) | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
-    if (!targetsDone || !targetsDone.isTruthy()) return false;
-
-    const targetsDoneArray = Array.isArray(targetsDone.data) ? targetsDone.data : [targetsDone.data];
+    const targetsDoneArray = extractTargetsDoneArray(entry);
     return targetsDoneArray.some((t: any) => t.toString() === activeTarget);
   }
 
@@ -313,6 +404,20 @@
     return areTargetsEmpty;
   }
 
+  function getFilterFrontmatterValues(filterValue: "all" | "filled" | "empty"): {
+    showHasTargets: boolean;
+    showEmptyTargets: boolean;
+  } {
+    if (filterValue === "all") {
+      return { showHasTargets: true, showEmptyTargets: true };
+    } else if (filterValue === "filled") {
+      return { showHasTargets: true, showEmptyTargets: false };
+    } else {
+      // filterValue === "empty"
+      return { showHasTargets: false, showEmptyTargets: true };
+    }
+  }
+
   function handleTargetFilterChange(event: Event) {
     const radio = event.target as HTMLInputElement;
     const filterValue = radio.value as "all" | "filled" | "empty";
@@ -320,20 +425,11 @@
     const activeFile = app.workspace.activeEditor?.file;
     if (!activeFile) return;
 
+    const { showHasTargets, showEmptyTargets } = getFilterFrontmatterValues(filterValue);
+
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
-      if (filterValue === "all") {
-        // Show all - set both to false
-        frontmatter["check_show_has_targets"] = true;
-        frontmatter["check_show_empty_targets"] = true;
-      } else if (filterValue === "filled") {
-        // Show filled targets only
-        frontmatter["check_show_has_targets"] = true;
-        frontmatter["check_show_empty_targets"] = false;
-      } else if (filterValue === "empty") {
-        // Show empty targets only
-        frontmatter["check_show_has_targets"] = false;
-        frontmatter["check_show_empty_targets"] = true;
-      }
+      frontmatter["check_show_has_targets"] = showHasTargets;
+      frontmatter["check_show_empty_targets"] = showEmptyTargets;
     });
 
     // Update local state
@@ -402,9 +498,9 @@
     </div>
   </div>
 
-  {#each entryData as { entry, baseProperties: props }, index (entry.file.path)}
+  {#each entryData as { entry, filledProperties, emptyProperties }, index (entry.file.path)}
     <div class="entry {getEntryClasses(entry)}">
-      {#each props as propData (propData.propertyFull)}
+      {#each filledProperties as propData (propData.propertyFull)}
         <div class="property">
           <label class="property-label" for={`${entry.file.path}-${propData.propertyFull}`}>{propData.label}</label>
           {#if propData.propertyType === "note"}
@@ -421,6 +517,13 @@
           {/if}
         </div>
       {/each}
+      {#if emptyProperties.length > 0}
+        <div class="empty-properties-container">
+          {#each emptyProperties as propData (propData.propertyFull)}
+            <span class="empty-property-label">{propData.label}</span>
+          {/each}
+        </div>
+      {/if}
       <div class="actions-container">
         {#if activeTarget}
           <button class="btn-primary" onclick={() => handleWatch(entry)}>
@@ -613,5 +716,22 @@
     gap: 0.5rem;
     align-items: start;
     flex-wrap: wrap;
+  }
+
+  .empty-properties-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--background-modifier-border);
+    opacity: 0.5;
+  }
+
+  .empty-property-label {
+    font-size: 0.85rem;
+    color: red;
+    font-weight: 500;
+    text-decoration: line-through;
   }
 </style>
