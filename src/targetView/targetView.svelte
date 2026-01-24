@@ -161,12 +161,15 @@
 
     const { filledProperties, emptyProperties } = separatePropertiesByValue(validProps);
     const fileContent = await readFileContent(entry.file);
+    // remove embedded bases, e.g.: ![[Inbox/_data/base.base#OmniSingleItem|base]]
+    const fileContentWithoutEmbeddedBases = fileContent.replace(/!\[\[.+?\.base.+?\]\]/g, "");
+    console.log("fileContent", fileContentWithoutEmbeddedBases);
 
     return {
       entry,
       filledProperties,
       emptyProperties,
-      fileContent,
+      fileContent: fileContentWithoutEmbeddedBases,
     };
   }
 
@@ -502,67 +505,77 @@
     const leaf = app.workspace.getLeaf(false);
     await leaf.openFile(entry.file);
   }
+
+  function isOmniList(): boolean {
+    const metadata = getActiveFileMetadata();
+    if (!metadata?.frontmatter) return false;
+
+    const mdListType = metadata.frontmatter["md_list_type"];
+    return !!mdListType;
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
-  <div class="filters-container">
-    <label for="active-target-select">Select your target:</label>
-    <select id="active-target-select" value={activeTarget || ""} onchange={handleFilterSelect}>
-      <option value="">All</option>
-      {#each ALL_TARGETS as target}
-        <option value={target.value}>{formatTarget(target)}</option>
-      {/each}
-    </select>
+  {#if isOmniList()}
+    <div class="filters-container">
+      <label for="active-target-select">Select your target:</label>
+      <select id="active-target-select" value={activeTarget || ""} onchange={handleFilterSelect}>
+        <option value="">All</option>
+        {#each ALL_TARGETS as target}
+          <option value={target.value}>{formatTarget(target)}</option>
+        {/each}
+      </select>
 
-    <div class="search-group">
-      <label for="list-search-input">Search:</label>
-      <input
-        id="list-search-input"
-        type="text"
-        class="search-input"
-        placeholder="Search..."
-        value={searchValue}
-        oninput={handleSearchChange}
-      />
-    </div>
+      <div class="search-group">
+        <label for="list-search-input">Search:</label>
+        <input
+          id="list-search-input"
+          type="text"
+          class="search-input"
+          placeholder="Search..."
+          value={searchValue}
+          oninput={handleSearchChange}
+        />
+      </div>
 
-    <div class="target-filter-group">
-      <span class="filter-label">Show:</span>
-      <div class="radio-group">
-        <label class="radio-label">
-          <input
-            type="radio"
-            name="target-filter"
-            value="all"
-            checked={targetFilter === "all"}
-            onchange={handleTargetFilterChange}
-          />
-          <span>All</span>
-        </label>
-        <label class="radio-label">
-          <input
-            type="radio"
-            name="target-filter"
-            value="filled"
-            checked={targetFilter === "filled"}
-            onchange={handleTargetFilterChange}
-          />
-          <span>Filled Targets</span>
-        </label>
-        <label class="radio-label">
-          <input
-            type="radio"
-            name="target-filter"
-            value="empty"
-            checked={targetFilter === "empty"}
-            onchange={handleTargetFilterChange}
-          />
-          <span>Empty Targets</span>
-        </label>
+      <div class="target-filter-group">
+        <span class="filter-label">Show:</span>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input
+              type="radio"
+              name="target-filter"
+              value="all"
+              checked={targetFilter === "all"}
+              onchange={handleTargetFilterChange}
+            />
+            <span>All</span>
+          </label>
+          <label class="radio-label">
+            <input
+              type="radio"
+              name="target-filter"
+              value="filled"
+              checked={targetFilter === "filled"}
+              onchange={handleTargetFilterChange}
+            />
+            <span>Filled Targets</span>
+          </label>
+          <label class="radio-label">
+            <input
+              type="radio"
+              name="target-filter"
+              value="empty"
+              checked={targetFilter === "empty"}
+              onchange={handleTargetFilterChange}
+            />
+            <span>Empty Targets</span>
+          </label>
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 
   {#each entryData as { entry, filledProperties, emptyProperties, fileContent }, index (entry.file.path)}
     <div class="entry {getEntryClasses(entry)}">
@@ -583,7 +596,7 @@
           {/if}
         </div>
       {/each}
-      {#if fileContent && fileContent.trim().length > 0}
+      {#if fileContent && fileContent?.trim()?.length > 0 && isOmniList()}
         <div class="property">
           <label class="property-label" for={`${entry.file.path}-content`}>Content ({fileContent.length} characters)</label>
           <EditableTextarea
