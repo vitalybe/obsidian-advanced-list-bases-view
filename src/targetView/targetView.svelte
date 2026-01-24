@@ -57,6 +57,9 @@
   // Filter state: "all", "filled", "empty"
   let targetFilter = $state<"all" | "filled" | "empty">("all");
 
+  // Search state
+  let searchValue = $state<string>("");
+
   // Reactively process entries when they change
   $effect(() => {
     async function processEntriesEffect() {
@@ -64,6 +67,16 @@
     }
 
     processEntriesEffect();
+  });
+
+  // Reactively update search value when active file changes
+  $effect(() => {
+    // Access active file to create reactive dependency
+    const activeFile = app.workspace.activeEditor?.file;
+    if (activeFile) {
+      // Update search state from file frontmatter when active file changes
+      updateSearchStateFromFile();
+    }
   });
 
   function debugLog(message: string, ...args: unknown[]): void {
@@ -168,6 +181,9 @@
 
     // Update filter state from file frontmatter
     updateFilterStateFromFile();
+
+    // Update search value from file frontmatter
+    updateSearchStateFromFile();
 
     return entryData;
   }
@@ -280,6 +296,17 @@
     const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
 
     targetFilter = determineFilterState(showHasTargets, showEmptyTargets);
+  }
+
+  function updateSearchStateFromFile() {
+    const activeFileMetadata = getActiveFileMetadata();
+    if (!activeFileMetadata?.frontmatter) {
+      searchValue = "";
+      return;
+    }
+
+    const search = activeFileMetadata.frontmatter["md_list_search"] as string | undefined;
+    searchValue = search || "";
   }
 
   function openRedditUrl(entry: BasesEntry) {
@@ -438,6 +465,26 @@
     targetFilter = filterValue;
   }
 
+  function handleSearchChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const newValue = input.value;
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      if (newValue.trim() === "") {
+        // Remove the property if empty
+        delete frontmatter["md_list_search"];
+      } else {
+        frontmatter["md_list_search"] = newValue;
+      }
+    });
+
+    // Update local state
+    searchValue = newValue;
+  }
+
   function getEntryClasses(entry: BasesEntry): string {
     return [
       getBooleanValue(entry, "formula.fnzShouldShowRulesCombined") === false ? "entry-about-to-disappear" : "",
@@ -459,7 +506,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
-  <div class="target-selector">
+  <div class="filters-container">
     <label for="active-target-select">Select your target:</label>
     <select id="active-target-select" value={activeTarget || ""} onchange={handleFilterSelect}>
       <option value="">All</option>
@@ -467,6 +514,18 @@
         <option value={target.value}>{formatTarget(target)}</option>
       {/each}
     </select>
+
+    <div class="search-group">
+      <label for="list-search-input">Search:</label>
+      <input
+        id="list-search-input"
+        type="text"
+        class="search-input"
+        placeholder="Search..."
+        value={searchValue}
+        oninput={handleSearchChange}
+      />
+    </div>
 
     <div class="target-filter-group">
       <span class="filter-label">Show:</span>
@@ -586,8 +645,9 @@
     outline: none;
   }
 
-  .target-selector {
+  .filters-container {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 1.5rem;
@@ -595,12 +655,12 @@
     border-bottom: 1px solid var(--background-modifier-border);
   }
 
-  .target-selector label {
+  .filters-container label {
     font-weight: 500;
     color: var(--text-normal);
   }
 
-  .target-selector select {
+  .filters-container select {
     padding: 0.4rem 0.8rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
@@ -610,7 +670,34 @@
     font-size: 0.95rem;
   }
 
-  .target-selector select:focus {
+  .filters-container select:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+  }
+
+  .search-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-group label {
+    font-weight: 500;
+    color: var(--text-normal);
+    white-space: nowrap;
+  }
+
+  .search-input {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 0.95rem;
+    min-width: 200px;
+  }
+
+  .search-input:focus {
     outline: none;
     border-color: var(--interactive-accent);
   }
@@ -619,9 +706,6 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-left: 1rem;
-    padding-left: 1rem;
-    border-left: 1px solid var(--background-modifier-border);
     flex-wrap: wrap;
   }
 
