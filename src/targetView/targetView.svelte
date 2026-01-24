@@ -640,7 +640,6 @@
           label="Targets:"
           initiallyExpanded={getAreTargetsShown(entry)}
         />
-        <GroupsAndTargetsSelector {entry} {app} propertyName="md_targets_done" label="Seen:" initiallyExpanded={false} />
       </div>
       {#if index < entryData.length - 1}
         <hr class="entry-separator" />
@@ -849,7 +848,7 @@
 
   .empty-property-label {
     font-size: 0.85rem;
-    color: red;
+    color: grey;
     font-weight: 500;
     text-decoration: line-through;
   }

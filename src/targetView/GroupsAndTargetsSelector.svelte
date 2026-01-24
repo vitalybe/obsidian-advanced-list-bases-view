@@ -19,16 +19,14 @@
   } = $props();
 
   // Internal expansion state - can be overridden by user
-  let isExpanded = $state(initiallyExpanded);
+  let isExpanded = $state(false);
   let userHasInteracted = $state(false);
 
   // Update internal state when initiallyExpanded prop changes
   $effect(() => {
-    if (initiallyExpanded !== undefined) {
-      // Only update if user hasn't manually interacted (on first render)
-      if (!userHasInteracted) {
-        isExpanded = initiallyExpanded;
-      }
+    // Only update if user hasn't manually interacted
+    if (!userHasInteracted) {
+      isExpanded = initiallyExpanded;
     }
   });
 
@@ -215,17 +213,19 @@
             {#each getGroupMembers(group.value) as target}
               {@const targetState = getTargetState(entry, target)}
               <label class="checkbox-label" class:done={targetState === "done"}>
-                {#if targetState === "done"}
-                  <button class="target-icon-btn" onclick={() => handleTargetChange(entry, target)} aria-label="Mark as active">
-                    👁️
-                  </button>
-                {:else}
-                  <input
-                    type="checkbox"
-                    checked={targetState === "active" || targetState === "done"}
-                    onchange={() => handleTargetChange(entry, target)}
-                  />
-                {/if}
+                <button
+                  class="target-icon-btn"
+                  onclick={() => handleTargetChange(entry, target)}
+                  aria-label={targetState === "none" ? "Mark as active" : targetState === "active" ? "Mark as done" : "Remove"}
+                >
+                  {#if targetState === "none"}
+                    <span class="target-icon-empty">☐</span>
+                  {:else if targetState === "active"}
+                    <span class="target-icon-active">☑</span>
+                  {:else}
+                    <span class="target-icon-done">👁️</span>
+                  {/if}
+                </button>
                 <span>{formatTarget(target)}</span>
               </label>
             {/each}
@@ -273,7 +273,6 @@
   }
 
   .no-targets {
-    font-style: italic;
     color: var(--text-muted);
   }
 
@@ -307,11 +306,6 @@
 
   .checkbox-label.done {
     opacity: 0.7;
-    font-style: italic;
-  }
-
-  input[type="checkbox"] {
-    margin-inline-end: 0;
   }
 
   .target-icon-btn {
@@ -330,12 +324,16 @@
     transition: transform 0.1s;
   }
 
-  .target-icon-btn:hover {
-    transform: scale(1.1);
+  .target-icon-empty {
+    font-size: 1.8rem;
   }
 
-  .target-icon-btn:active {
-    transform: scale(0.95);
+  .target-icon-active {
+    font-size: 1.6rem;
+  }
+
+  .target-icon-done {
+    font-size: 1rem;
   }
 
   .btn-regular {
