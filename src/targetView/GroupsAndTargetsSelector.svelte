@@ -6,12 +6,14 @@
     entry,
     app,
     propertyName = "md_targets",
+    donePropertyName = "md_targets_done",
     label = "Targets:",
-    initiallyExpanded = false
+    initiallyExpanded = false,
   }: {
     entry: BasesEntry;
     app: App;
     propertyName?: string;
+    donePropertyName?: string;
     label?: string;
     initiallyExpanded?: boolean;
   } = $props();
@@ -49,6 +51,28 @@
     return Array.isArray(result) ? result : [result];
   }
 
+  function getEntryDoneTargets(entry: BasesEntry): string[] {
+    const entryFileMetadata = getEntryFileMetadata(entry);
+    if (!entryFileMetadata) return [];
+    const result = entryFileMetadata.frontmatter?.[donePropertyName] ?? [];
+    return Array.isArray(result) ? result : [result];
+  }
+
+  type TargetState = "none" | "active" | "done";
+
+  function getTargetState(entry: BasesEntry, target: DefinedTarget): TargetState {
+    const targets = getEntryTargets(entry);
+    const doneTargets = getEntryDoneTargets(entry);
+
+    if (doneTargets.includes(target.value)) {
+      return "done";
+    } else if (targets.includes(target.value)) {
+      return "active";
+    } else {
+      return "none";
+    }
+  }
+
   function getTargetValue(entry: BasesEntry, target: DefinedTarget): boolean {
     const targets = getEntryTargets(entry);
     return targets.includes(target.value);
@@ -59,12 +83,18 @@
   }
 
   function getSelectedTargetsDisplay(): string {
-    return getEntryTargets(entry)
-      .map((entryTarget) => {
-        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-        return target ? formatTarget(target) : entryTarget;
-      })
-      .join(", ");
+    const activeTargets = getEntryTargets(entry).map((entryTarget) => {
+      const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+      return target ? formatTarget(target) : entryTarget;
+    });
+
+    const doneTargets = getEntryDoneTargets(entry).map((entryTarget) => {
+      const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+      const formatted = target ? formatTarget(target) : entryTarget;
+      return `👁️ ${formatted}`;
+    });
+
+    return [...activeTargets, ...doneTargets].join(", ");
   }
 
   function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
@@ -74,16 +104,40 @@
     if (!isExpanded) {
       isExpanded = true;
     }
-    
+
+    const currentState = getTargetState(entry, target);
+
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       const targets = (frontmatter[propertyName] as string[]) ?? [];
-      const index = targets.indexOf(target.value);
-      if (index > -1) {
-        targets.splice(index, 1);
-      } else {
-        targets.push(target.value);
+      const doneTargets = (frontmatter[donePropertyName] as string[]) ?? [];
+
+      // Cycle through states: none → active → done → none
+      if (currentState === "none") {
+        // Add to active targets
+        if (!targets.includes(target.value)) {
+          targets.push(target.value);
+        }
+      } else if (currentState === "active") {
+        // Move from active to done
+        if (!doneTargets.includes(target.value)) {
+          doneTargets.push(target.value);
+        }
+      } else if (currentState === "done") {
+        // Remove from done (back to none)
+        const indexTargets = targets.indexOf(target.value);
+        if (indexTargets > -1) {
+          targets.splice(indexTargets, 1);
+        }
+
+        const indexDoneTargets = doneTargets.indexOf(target.value);
+        if (indexDoneTargets > -1) {
+          doneTargets.splice(indexDoneTargets, 1);
+        }
       }
+
+      console.log("targets", targets, "doneTargets", doneTargets);
       frontmatter[propertyName] = targets;
+      frontmatter[donePropertyName] = doneTargets;
     });
   }
 
@@ -104,7 +158,7 @@
     if (!isExpanded) {
       isExpanded = true;
     }
-    
+
     const members = getGroupMembers(group);
     const isFullySelected = isGroupFullySelected(entry, group);
 
@@ -159,12 +213,19 @@
               <span>{group.label}</span>
             </button>
             {#each getGroupMembers(group.value) as target}
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={getTargetValue(entry, target)}
-                  onchange={() => handleTargetChange(entry, target)}
-                />
+              {@const targetState = getTargetState(entry, target)}
+              <label class="checkbox-label" class:done={targetState === "done"}>
+                {#if targetState === "done"}
+                  <button class="target-icon-btn" onclick={() => handleTargetChange(entry, target)} aria-label="Mark as active">
+                    👁️
+                  </button>
+                {:else}
+                  <input
+                    type="checkbox"
+                    checked={targetState === "active" || targetState === "done"}
+                    onchange={() => handleTargetChange(entry, target)}
+                  />
+                {/if}
                 <span>{formatTarget(target)}</span>
               </label>
             {/each}
@@ -242,6 +303,39 @@
     gap: 0.5rem;
     cursor: pointer;
     user-select: none;
+  }
+
+  .checkbox-label.done {
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  input[type="checkbox"] {
+    margin-inline-end: 0;
+  }
+
+  .target-icon-btn {
+    height: 14px;
+    width: 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    border: none;
+    font-size: 1rem;
+    line-height: 1;
+    transition: transform 0.1s;
+  }
+
+  .target-icon-btn:hover {
+    transform: scale(1.1);
+  }
+
+  .target-icon-btn:active {
+    transform: scale(0.95);
   }
 
   .btn-regular {
