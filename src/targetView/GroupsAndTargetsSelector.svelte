@@ -81,12 +81,15 @@
   }
 
   function getSelectedTargetsDisplay(): string {
-    const activeTargets = getEntryTargets(entry).map((entryTarget) => {
-      const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-      return target ? formatTarget(target) : entryTarget;
-    });
+    const doneTargetsList = getEntryDoneTargets(entry);
+    const activeTargets = getEntryTargets(entry)
+      .filter((entryTarget) => !doneTargetsList.includes(entryTarget)) // Only show actives not in done
+      .map((entryTarget) => {
+        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
+        return target ? formatTarget(target) : entryTarget;
+      });
 
-    const doneTargets = getEntryDoneTargets(entry).map((entryTarget) => {
+    const doneTargets = doneTargetsList.map((entryTarget) => {
       const target = ALL_TARGETS.find((t) => t.value === entryTarget);
       const formatted = target ? formatTarget(target) : entryTarget;
       return `👁️ ${formatted}`;
