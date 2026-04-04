@@ -312,6 +312,28 @@
     searchValue = search || "";
   }
 
+  function extractEntryLink(entry: BasesEntry): string | null {
+    // Check md_link first (dedicated link property)
+    const mdLink = entry.getValue("note.md_link");
+    if (mdLink && mdLink.isTruthy()) {
+      const linkStr = mdLink.toString().trim();
+      if (linkStr.length > 0) return linkStr;
+    }
+
+    // Check md_title for markdown links like [text](url)
+    const mdTitle = entry.getValue("note.md_title");
+    if (mdTitle && mdTitle.isTruthy()) {
+      const titleStr = mdTitle.toString();
+      const markdownLinkMatch = titleStr.match(/\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+      if (markdownLinkMatch) return markdownLinkMatch[1];
+      // Check for bare URLs
+      const urlMatch = titleStr.match(/(https?:\/\/[^\s]+)/);
+      if (urlMatch) return urlMatch[1];
+    }
+
+    return null;
+  }
+
   function openRedditUrl(entry: BasesEntry) {
     const redditUrl = entry.getValue("note.reddit_url");
     if (redditUrl) {
@@ -333,9 +355,12 @@
   }
 
   function handleWatch(entry: BasesEntry) {
+    const link = extractEntryLink(entry);
+    if (!link) return;
+
     addActiveTargetToEntry(entry);
     setTimeout(() => {
-      openRedditUrl(entry);
+      window.open(link, "_blank");
     }, 100);
   }
 
@@ -620,7 +645,8 @@
       {/if}
       <div class="actions-container">
         {#if activeTarget}
-          <button class="btn-primary" onclick={() => handleWatch(entry)}>
+          {@const entryLink = extractEntryLink(entry)}
+          <button class="btn-primary" onclick={() => handleWatch(entry)} disabled={!entryLink}>
             Watch ({activeTargetLabel})
           </button>
           <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>
@@ -816,6 +842,12 @@
   .btn-primary {
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.7);
   }
 
   .btn-regular {
