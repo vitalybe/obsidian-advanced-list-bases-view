@@ -312,26 +312,26 @@
   }
 
   function updateFilterStateFromFile() {
-    const activeFileMetadata = getActiveFileMetadata();
-    if (!activeFileMetadata?.frontmatter) {
+    const metadata = getConfigFileMetadata() ?? getActiveFileMetadata();
+    if (!metadata?.frontmatter) {
       targetFilter = "all";
       return;
     }
 
-    const showHasTargets = activeFileMetadata.frontmatter["check_show_has_targets"] as boolean | undefined;
-    const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
+    const showHasTargets = metadata.frontmatter["check_show_has_targets"] as boolean | undefined;
+    const showEmptyTargets = metadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
 
     targetFilter = determineFilterState(showHasTargets, showEmptyTargets);
   }
 
   function updateSearchStateFromFile() {
-    const activeFileMetadata = getActiveFileMetadata();
-    if (!activeFileMetadata?.frontmatter) {
+    const metadata = getConfigFileMetadata() ?? getActiveFileMetadata();
+    if (!metadata?.frontmatter) {
       searchValue = "";
       return;
     }
 
-    const search = activeFileMetadata.frontmatter["md_list_search"] as string | undefined;
+    const search = metadata.frontmatter["md_list_search"] as string | undefined;
     searchValue = search || "";
   }
 
@@ -480,12 +480,14 @@
     const radio = event.target as HTMLInputElement;
     const filterValue = radio.value as "all" | "filled" | "empty";
 
+    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    if (!activeFile) return;
+    const targetFile = configFile ?? activeFile;
+    if (!targetFile) return;
 
     const { showHasTargets, showEmptyTargets } = getFilterFrontmatterValues(filterValue);
 
-    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
       frontmatter["check_show_has_targets"] = showHasTargets;
       frontmatter["check_show_empty_targets"] = showEmptyTargets;
     });
@@ -498,10 +500,12 @@
     const input = event.target as HTMLInputElement;
     const newValue = input.value;
 
+    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    if (!activeFile) return;
+    const targetFile = configFile ?? activeFile;
+    if (!targetFile) return;
 
-    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
       if (newValue.trim() === "") {
         // Remove the property if empty
         delete frontmatter["md_list_search"];
