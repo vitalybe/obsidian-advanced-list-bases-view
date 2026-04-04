@@ -225,6 +225,27 @@
     return metadata;
   }
 
+  function getConfigFile(): TFile | null {
+    const activeFileMetadata = getActiveFileMetadata();
+    const mdConfig = activeFileMetadata?.frontmatter?.["md_config"];
+    if (!mdConfig) return null;
+
+    // mdConfig is a wiki link like "[[Shared bases config]]", extract the link text
+    const linkMatch = mdConfig.toString().match(/^\[\[(.+?)\]\]$/);
+    const linkPath = linkMatch ? linkMatch[1] : mdConfig.toString();
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return null;
+
+    return app.metadataCache.getFirstLinkpathDest(linkPath, activeFile.path);
+  }
+
+  function getConfigFileMetadata(): FrontMatterCache | undefined {
+    const configFile = getConfigFile();
+    if (!configFile) return undefined;
+    return app.metadataCache.getFileCache(configFile) ?? undefined;
+  }
+
   function renderPropertyValue(element: HTMLElement, value: any) {
     // Render property value when element is mounted
     if (value && renderContext) {
@@ -253,8 +274,10 @@
   function getActiveFileTarget(): string | undefined {
     let target: string | undefined;
 
-    const activeFileMetadata = getActiveFileMetadata();
-    const targets = activeFileMetadata?.frontmatter?.[TARGETS_PROPERTY];
+    // Read from shared config file if available, fall back to active file
+    const configMetadata = getConfigFileMetadata();
+    const metadata = configMetadata ?? getActiveFileMetadata();
+    const targets = metadata?.frontmatter?.[TARGETS_PROPERTY];
     debugLog("getActiveFileTarget", targets);
     if (targets) {
       if (Array.isArray(targets)) {
@@ -382,8 +405,8 @@
     });
   }
 
-  function updateTargetProperty(activeFile: TFile, selectedTarget: string) {
-    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+  function updateTargetProperty(targetFile: TFile, selectedTarget: string) {
+    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
         frontmatter[TARGETS_PROPERTY] = null;
@@ -398,10 +421,13 @@
     const select = event.target as HTMLSelectElement;
     const selectedTarget = select.value;
 
+    // Write to shared config file if available, fall back to active file
+    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    if (!activeFile) return;
+    const targetFile = configFile ?? activeFile;
+    if (!targetFile) return;
 
-    updateTargetProperty(activeFile, selectedTarget);
+    updateTargetProperty(targetFile, selectedTarget);
   }
 
   function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
