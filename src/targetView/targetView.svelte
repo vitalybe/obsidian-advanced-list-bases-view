@@ -476,8 +476,8 @@
   }
 
   function handleTargetFilterChange(event: Event) {
-    const radio = event.target as HTMLInputElement;
-    const filterValue = radio.value as "all" | "filled" | "empty";
+    const select = event.target as HTMLSelectElement;
+    const filterValue = select.value as "all" | "filled" | "empty";
 
     const activeFile = app.workspace.activeEditor?.file;
     if (!activeFile) return;
@@ -565,39 +565,12 @@
       </div>
 
       <div class="target-filter-group">
-        <span class="filter-label">Show:</span>
-        <div class="radio-group">
-          <label class="radio-label">
-            <input
-              type="radio"
-              name="target-filter"
-              value="all"
-              checked={targetFilter === "all"}
-              onchange={handleTargetFilterChange}
-            />
-            <span>All</span>
-          </label>
-          <label class="radio-label">
-            <input
-              type="radio"
-              name="target-filter"
-              value="filled"
-              checked={targetFilter === "filled"}
-              onchange={handleTargetFilterChange}
-            />
-            <span>Filled Targets</span>
-          </label>
-          <label class="radio-label">
-            <input
-              type="radio"
-              name="target-filter"
-              value="empty"
-              checked={targetFilter === "empty"}
-              onchange={handleTargetFilterChange}
-            />
-            <span>Empty Targets</span>
-          </label>
-        </div>
+        <label for="target-filter-select" class="filter-label">Show:</label>
+        <select id="target-filter-select" value={targetFilter} onchange={handleTargetFilterChange}>
+          <option value="all">All</option>
+          <option value="filled">Filled Targets</option>
+          <option value="empty">Empty Targets</option>
+        </select>
       </div>
     </div>
   {/if}
@@ -753,30 +726,6 @@
     white-space: nowrap;
   }
 
-  .radio-group {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .radio-label {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: var(--text-normal);
-  }
-
-  .radio-label input[type="radio"] {
-    cursor: pointer;
-    accent-color: var(--interactive-accent);
-  }
-
-  .radio-label:hover {
-    color: var(--text-accent);
-  }
 
   .entry {
     margin-bottom: 0.5rem;
