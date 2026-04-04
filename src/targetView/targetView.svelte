@@ -225,27 +225,6 @@
     return metadata;
   }
 
-  function getConfigFile(): TFile | null {
-    const activeFileMetadata = getActiveFileMetadata();
-    const mdConfig = activeFileMetadata?.frontmatter?.["md_config"];
-    if (!mdConfig) return null;
-
-    // mdConfig is a wiki link like "[[Shared bases config]]", extract the link text
-    const linkMatch = mdConfig.toString().match(/^\[\[(.+?)\]\]$/);
-    const linkPath = linkMatch ? linkMatch[1] : mdConfig.toString();
-
-    const activeFile = app.workspace.activeEditor?.file;
-    if (!activeFile) return null;
-
-    return app.metadataCache.getFirstLinkpathDest(linkPath, activeFile.path);
-  }
-
-  function getConfigFileMetadata(): FrontMatterCache | undefined {
-    const configFile = getConfigFile();
-    if (!configFile) return undefined;
-    return app.metadataCache.getFileCache(configFile) ?? undefined;
-  }
-
   function renderPropertyValue(element: HTMLElement, value: any) {
     // Render property value when element is mounted
     if (value && renderContext) {
@@ -274,10 +253,8 @@
   function getActiveFileTarget(): string | undefined {
     let target: string | undefined;
 
-    // Read from shared config file if available, fall back to active file
-    const configMetadata = getConfigFileMetadata();
-    const metadata = configMetadata ?? getActiveFileMetadata();
-    const targets = metadata?.frontmatter?.[TARGETS_PROPERTY];
+    const activeFileMetadata = getActiveFileMetadata();
+    const targets = activeFileMetadata?.frontmatter?.[TARGETS_PROPERTY];
     debugLog("getActiveFileTarget", targets);
     if (targets) {
       if (Array.isArray(targets)) {
@@ -312,26 +289,26 @@
   }
 
   function updateFilterStateFromFile() {
-    const metadata = getConfigFileMetadata() ?? getActiveFileMetadata();
-    if (!metadata?.frontmatter) {
+    const activeFileMetadata = getActiveFileMetadata();
+    if (!activeFileMetadata?.frontmatter) {
       targetFilter = "all";
       return;
     }
 
-    const showHasTargets = metadata.frontmatter["check_show_has_targets"] as boolean | undefined;
-    const showEmptyTargets = metadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
+    const showHasTargets = activeFileMetadata.frontmatter["check_show_has_targets"] as boolean | undefined;
+    const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
 
     targetFilter = determineFilterState(showHasTargets, showEmptyTargets);
   }
 
   function updateSearchStateFromFile() {
-    const metadata = getConfigFileMetadata() ?? getActiveFileMetadata();
-    if (!metadata?.frontmatter) {
+    const activeFileMetadata = getActiveFileMetadata();
+    if (!activeFileMetadata?.frontmatter) {
       searchValue = "";
       return;
     }
 
-    const search = metadata.frontmatter["md_list_search"] as string | undefined;
+    const search = activeFileMetadata.frontmatter["md_list_search"] as string | undefined;
     searchValue = search || "";
   }
 
@@ -405,8 +382,8 @@
     });
   }
 
-  function updateTargetProperty(targetFile: TFile, selectedTarget: string) {
-    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
+  function updateTargetProperty(activeFile: TFile, selectedTarget: string) {
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
         frontmatter[TARGETS_PROPERTY] = null;
@@ -421,13 +398,10 @@
     const select = event.target as HTMLSelectElement;
     const selectedTarget = select.value;
 
-    // Write to shared config file if available, fall back to active file
-    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    const targetFile = configFile ?? activeFile;
-    if (!targetFile) return;
+    if (!activeFile) return;
 
-    updateTargetProperty(targetFile, selectedTarget);
+    updateTargetProperty(activeFile, selectedTarget);
   }
 
   function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
@@ -480,14 +454,12 @@
     const radio = event.target as HTMLInputElement;
     const filterValue = radio.value as "all" | "filled" | "empty";
 
-    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    const targetFile = configFile ?? activeFile;
-    if (!targetFile) return;
+    if (!activeFile) return;
 
     const { showHasTargets, showEmptyTargets } = getFilterFrontmatterValues(filterValue);
 
-    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       frontmatter["check_show_has_targets"] = showHasTargets;
       frontmatter["check_show_empty_targets"] = showEmptyTargets;
     });
@@ -500,12 +472,10 @@
     const input = event.target as HTMLInputElement;
     const newValue = input.value;
 
-    const configFile = getConfigFile();
     const activeFile = app.workspace.activeEditor?.file;
-    const targetFile = configFile ?? activeFile;
-    if (!targetFile) return;
+    if (!activeFile) return;
 
-    app.fileManager.processFrontMatter(targetFile, (frontmatter) => {
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (newValue.trim() === "") {
         // Remove the property if empty
         delete frontmatter["md_list_search"];
