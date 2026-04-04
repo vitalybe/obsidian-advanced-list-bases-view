@@ -29,7 +29,13 @@
   }
 
   // Props with defaults to prevent undefined errors
-  let { targetViewStore, config = undefined, app, renderContext, component }: Props = $props();
+  let {
+    targetViewStore,
+    config = undefined,
+    app,
+    renderContext,
+    component,
+  }: Props = $props();
 
   // Subscribe to store to get reactive values
   let storeData = $derived($targetViewStore);
@@ -127,8 +133,12 @@
     filledProperties: PropertyData[];
     emptyProperties: PropertyData[];
   } {
-    const filledProperties = properties.filter((p) => isPropertyValueFilled(p.value));
-    const emptyProperties = properties.filter((p) => isPropertyValueEmpty(p.value));
+    const filledProperties = properties.filter((p) =>
+      isPropertyValueFilled(p.value),
+    );
+    const emptyProperties = properties.filter((p) =>
+      isPropertyValueEmpty(p.value),
+    );
 
     return { filledProperties, emptyProperties };
   }
@@ -149,20 +159,26 @@
 
   async function processEntry(
     entry: BasesEntry,
-    properties: BasesPropertyId[]
+    properties: BasesPropertyId[],
   ): Promise<{
     entry: BasesEntry;
     filledProperties: PropertyData[];
     emptyProperties: PropertyData[];
     fileContent: string;
   }> {
-    const props = await Promise.all(properties.map(async (prop) => await processProperty(entry, prop)));
+    const props = await Promise.all(
+      properties.map(async (prop) => await processProperty(entry, prop)),
+    );
     const validProps = props.filter((p) => p !== null) as PropertyData[];
 
-    const { filledProperties, emptyProperties } = separatePropertiesByValue(validProps);
+    const { filledProperties, emptyProperties } =
+      separatePropertiesByValue(validProps);
     const fileContent = await readFileContent(entry.file);
     // remove embedded bases, e.g.: ![[Inbox/_data/base.base#OmniSingleItem|base]]
-    const fileContentWithoutEmbeddedBases = fileContent.replace(/!\[\[.+?\.base.+?\]\]/g, "");
+    const fileContentWithoutEmbeddedBases = fileContent.replace(
+      /!\[\[.+?\.base.+?\]\]/g,
+      "",
+    );
     console.log("fileContent", fileContentWithoutEmbeddedBases);
 
     return {
@@ -173,9 +189,14 @@
     };
   }
 
-  async function processEntries(entries: BasesEntry[], properties: BasesPropertyId[]) {
+  async function processEntries(
+    entries: BasesEntry[],
+    properties: BasesPropertyId[],
+  ) {
     debugLog("processEntries");
-    const entryData = await Promise.all(entries.map((entry) => processEntry(entry, properties)));
+    const entryData = await Promise.all(
+      entries.map((entry) => processEntry(entry, properties)),
+    );
 
     // Update active target info
     activeTarget = getActiveFileTarget();
@@ -191,7 +212,10 @@
     return entryData;
   }
 
-  async function processProperty(entry: BasesEntry, prop: BasesPropertyId): Promise<PropertyData | null> {
+  async function processProperty(
+    entry: BasesEntry,
+    prop: BasesPropertyId,
+  ): Promise<PropertyData | null> {
     try {
       const value = entry.getValue(prop);
       // Return null only if property doesn't exist, not if it's empty
@@ -276,7 +300,7 @@
 
   function determineFilterState(
     showHasTargets: boolean | undefined,
-    showEmptyTargets: boolean | undefined
+    showEmptyTargets: boolean | undefined,
   ): "all" | "filled" | "empty" {
     if (showHasTargets && showEmptyTargets) {
       return "all";
@@ -295,8 +319,12 @@
       return;
     }
 
-    const showHasTargets = activeFileMetadata.frontmatter["check_show_has_targets"] as boolean | undefined;
-    const showEmptyTargets = activeFileMetadata.frontmatter["check_show_empty_targets"] as boolean | undefined;
+    const showHasTargets = activeFileMetadata.frontmatter[
+      "check_show_has_targets"
+    ] as boolean | undefined;
+    const showEmptyTargets = activeFileMetadata.frontmatter[
+      "check_show_empty_targets"
+    ] as boolean | undefined;
 
     targetFilter = determineFilterState(showHasTargets, showEmptyTargets);
   }
@@ -308,7 +336,9 @@
       return;
     }
 
-    const search = activeFileMetadata.frontmatter["md_list_search"] as string | undefined;
+    const search = activeFileMetadata.frontmatter["md_list_search"] as
+      | string
+      | undefined;
     searchValue = search || "";
   }
 
@@ -324,7 +354,9 @@
     const mdTitle = entry.getValue("note.md_title");
     if (mdTitle && mdTitle.isTruthy()) {
       const titleStr = mdTitle.toString();
-      const markdownLinkMatch = titleStr.match(/\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+      const markdownLinkMatch = titleStr.match(
+        /\[.*?\]\((https?:\/\/[^\s)]+)\)/,
+      );
       if (markdownLinkMatch) return markdownLinkMatch[1];
       // Check for bare URLs
       const urlMatch = titleStr.match(/(https?:\/\/[^\s]+)/);
@@ -371,7 +403,11 @@
     return targets ? [targets.toString()] : [];
   }
 
-  function toggleTargetInArray(targets: string[], target: string, shouldRemove: boolean): string[] {
+  function toggleTargetInArray(
+    targets: string[],
+    target: string,
+    shouldRemove: boolean,
+  ): string[] {
     if (shouldRemove) {
       const index = targets.indexOf(target);
       if (index > -1) {
@@ -392,7 +428,8 @@
     const isRead = isEntryMarkedAsRead(entry);
 
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const targetsOriginal = (frontmatter[TARGETS_DONE_PROPERTY] as unknown[] | unknown) ?? [];
+      const targetsOriginal =
+        (frontmatter[TARGETS_DONE_PROPERTY] as unknown[] | unknown) ?? [];
       const targets = normalizeTargetsArray(targetsOriginal);
       const updatedTargets = toggleTargetInArray(targets, activeTarget, isRead);
       frontmatter[TARGETS_DONE_PROPERTY] = updatedTargets;
@@ -435,13 +472,16 @@
   }
 
   function extractTargetsDoneArray(entry: BasesEntry): string[] {
-    const targetsDone: (Value & { data: string[] | string }) | null = entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
+    const targetsDone: (Value & { data: string[] | string }) | null =
+      entry.getValue(`note.${TARGETS_DONE_PROPERTY}`) as any;
 
     if (!targetsDone || !targetsDone.isTruthy()) {
       return [];
     }
 
-    return Array.isArray(targetsDone.data) ? targetsDone.data : [targetsDone.data];
+    return Array.isArray(targetsDone.data)
+      ? targetsDone.data
+      : [targetsDone.data];
   }
 
   function isEntryMarkedAsRead(entry: BasesEntry): boolean {
@@ -457,11 +497,16 @@
   }
 
   function getAreTargetsShown(entry: BasesEntry): boolean {
-    const areTargetsEmpty = getBooleanValue(entry, "formula.fnzTargetsEmptyTargets");
+    const areTargetsEmpty = getBooleanValue(
+      entry,
+      "formula.fnzTargetsEmptyTargets",
+    );
     return areTargetsEmpty;
   }
 
-  function getFilterFrontmatterValues(filterValue: "all" | "filled" | "empty"): {
+  function getFilterFrontmatterValues(
+    filterValue: "all" | "filled" | "empty",
+  ): {
     showHasTargets: boolean;
     showEmptyTargets: boolean;
   } {
@@ -482,7 +527,8 @@
     const activeFile = app.workspace.activeEditor?.file;
     if (!activeFile) return;
 
-    const { showHasTargets, showEmptyTargets } = getFilterFrontmatterValues(filterValue);
+    const { showHasTargets, showEmptyTargets } =
+      getFilterFrontmatterValues(filterValue);
 
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       frontmatter["check_show_has_targets"] = showHasTargets;
@@ -515,12 +561,20 @@
 
   function getEntryClasses(entry: BasesEntry): string {
     return [
-      getBooleanValue(entry, "formula.fnzShouldShowRulesCombined") === false ? "entry-about-to-disappear" : "",
-      getBooleanValue(entry, "formula.fnzTargetsEmptyTargets") ? "entry-targets-empty" : "",
+      getBooleanValue(entry, "formula.fnzShouldShowRulesCombined") === false
+        ? "entry-about-to-disappear"
+        : "",
+      getBooleanValue(entry, "formula.fnzTargetsEmptyTargets")
+        ? "entry-targets-empty"
+        : "",
     ].join(" ");
   }
 
-  function handlePropertyChange(entry: BasesEntry, propertyName: string, newValue: string) {
+  function handlePropertyChange(
+    entry: BasesEntry,
+    propertyName: string,
+    newValue: string,
+  ) {
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
       frontmatter[propertyName] = newValue;
     });
@@ -545,7 +599,11 @@
   {#if isOmniList()}
     <div class="filters-container">
       <label for="active-target-select">Select your target:</label>
-      <select id="active-target-select" value={activeTarget || ""} onchange={handleFilterSelect}>
+      <select
+        id="active-target-select"
+        value={activeTarget || ""}
+        onchange={handleFilterSelect}
+      >
         <option value="">All</option>
         {#each ALL_TARGETS as target}
           <option value={target.value}>{formatTarget(target)}</option>
@@ -566,7 +624,11 @@
 
       <div class="target-filter-group">
         <label for="target-filter-select" class="filter-label">Show:</label>
-        <select id="target-filter-select" value={targetFilter} onchange={handleTargetFilterChange}>
+        <select
+          id="target-filter-select"
+          value={targetFilter}
+          onchange={handleTargetFilterChange}
+        >
           <option value="all">All</option>
           <option value="filled">Filled Targets</option>
           <option value="empty">Empty Targets</option>
@@ -579,7 +641,11 @@
     <div class="entry {getEntryClasses(entry)}">
       {#each filledProperties as propData (propData.propertyFull)}
         <div class="property">
-          <label class="property-label" for={`${entry.file.path}-${propData.propertyFull}`}>{propData.label}</label>
+          <label
+            class="property-label"
+            for={`${entry.file.path}-${propData.propertyFull}`}
+            >{propData.label}</label
+          >
           {#if propData.propertyType === "note"}
             <EditableTextarea
               {renderContext}
@@ -587,16 +653,22 @@
               sourcePath={entry.file.path}
               id={`${entry.file.path}-${propData.propertyFull}`}
               value={propData.value}
-              onchange={(newValue) => handlePropertyChange(entry, propData.propertyName, newValue)}
+              onchange={(newValue) =>
+                handlePropertyChange(entry, propData.propertyName, newValue)}
             />
           {:else}
-            <span class="property-value" use:renderPropertyValue={propData.value}></span>
+            <span
+              class="property-value"
+              use:renderPropertyValue={propData.value}
+            ></span>
           {/if}
         </div>
       {/each}
       {#if fileContent && fileContent?.trim()?.length > 0 && isOmniList()}
         <div class="property">
-          <label class="property-label" for={`${entry.file.path}-content`}>Content ({fileContent.length} characters)</label>
+          <label class="property-label" for={`${entry.file.path}-content`}
+            >Content ({fileContent.length} characters)</label
+          >
           <EditableTextarea
             {renderContext}
             {app}
@@ -619,14 +691,22 @@
       <div class="actions-container">
         {#if activeTarget}
           {@const entryLink = extractEntryLink(entry)}
-          <button class="btn-primary" onclick={() => handleWatch(entry)} disabled={!entryLink}>
+          <button
+            class="btn-primary"
+            onclick={() => handleWatch(entry)}
+            disabled={!entryLink}
+          >
             Watch ({activeTargetLabel})
           </button>
           <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>
-            {isEntryMarkedAsRead(entry) ? `Unmark Read (${activeTargetLabel})` : `Mark Read (${activeTargetLabel})`}
+            {isEntryMarkedAsRead(entry)
+              ? `Unmark Read (${activeTargetLabel})`
+              : `Mark Read (${activeTargetLabel})`}
           </button>
         {/if}
-        <button class="btn-regular" onclick={() => openRedditUrl(entry)}> Open </button>
+        <button class="btn-regular" onclick={() => openRedditUrl(entry)}>
+          Open
+        </button>
         <button class="btn-destructive" onclick={() => handleRemove(entry)}>
           {isEntryMarkedAsDone(entry) ? "Restore" : "Remove"}
         </button>
@@ -672,13 +752,13 @@
   }
 
   .filters-container select {
-    padding: 0.4rem 0.8rem;
+    padding: 0 0.8rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     background-color: var(--background-primary);
     color: var(--text-normal);
     cursor: pointer;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
   }
 
   .filters-container select:focus {
@@ -725,7 +805,6 @@
     color: var(--text-normal);
     white-space: nowrap;
   }
-
 
   .entry {
     margin-bottom: 0.5rem;
