@@ -279,7 +279,7 @@
     let target: string | undefined;
 
     const activeFileMetadata = getActiveFileMetadata();
-    const targets = activeFileMetadata?.frontmatter?.[TARGETS_PROPERTY];
+    const targets = activeFileMetadata?.frontmatter?.[LIST_TARGET_PROPERTY];
     debugLog("getActiveFileTarget", targets);
     if (targets) {
       if (Array.isArray(targets)) {
