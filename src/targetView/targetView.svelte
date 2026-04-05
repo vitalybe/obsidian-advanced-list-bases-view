@@ -42,6 +42,7 @@
   let entries = $derived(storeData.entries);
   let properties = $derived(storeData.properties);
 
+  const LIST_TARGET_PROPERTY = "md_list_target";
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
   const IS_DONE_PROPERTY = "md_is_done";
@@ -444,14 +445,14 @@
     });
   }
 
-  function updateTargetProperty(activeFile: TFile, selectedTarget: string) {
+  function updateListTargetProperty(activeFile: TFile, selectedTarget: string) {
     app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
       if (selectedTarget === "") {
         // Remove the property if "None" is selected
-        frontmatter[TARGETS_PROPERTY] = null;
+        frontmatter[LIST_TARGET_PROPERTY] = null;
       } else {
         // Set the target as an array with the selected value
-        frontmatter[TARGETS_PROPERTY] = selectedTarget;
+        frontmatter[LIST_TARGET_PROPERTY] = selectedTarget;
       }
     });
   }
@@ -463,7 +464,7 @@
     const activeFile = app.workspace.activeEditor?.file;
     if (!activeFile) return;
 
-    updateTargetProperty(activeFile, selectedTarget);
+    updateListTargetProperty(activeFile, selectedTarget);
   }
 
   function getBooleanValue(entry: BasesEntry, prop: BasesPropertyId): boolean {
