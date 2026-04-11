@@ -54,8 +54,35 @@
       filledProperties: PropertyData[];
       emptyProperties: PropertyData[];
       fileContent: string;
+      hasTagsProperty: boolean;
     }>
   >([]);
+
+  // Tag state
+  let listTags = $state<string[]>([]);
+  let hiddenTags = $state<string[]>([]);
+
+  let tagCloud = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const tag of listTags) counts.set(tag, 0);
+    for (const ed of entryData) {
+      for (const t of getEntryTags(ed.entry)) {
+        counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    const all = Array.from(counts.entries()).map(([name, count]) => ({
+      name,
+      count,
+      hidden: hiddenTags.includes(name),
+    }));
+    const sortFn = (
+      a: { name: string; count: number },
+      b: { name: string; count: number },
+    ) => b.count - a.count || a.name.localeCompare(b.name);
+    const visible = all.filter((t) => !t.hidden).sort(sortFn);
+    const hidden = all.filter((t) => t.hidden).sort(sortFn);
+    return [...visible, ...hidden];
+  });
 
   // Track active target
   let activeTarget = $state<string | undefined>(undefined);
@@ -66,6 +93,8 @@
 
   // Search state
   let searchValue = $state<string>("");
+  let showSearch = $state<boolean>(false);
+  let searchInputEl = $state<HTMLInputElement | null>(null);
 
   // Reactively process entries when they change
   $effect(() => {
@@ -172,8 +201,15 @@
     );
     const validProps = props.filter((p) => p !== null) as PropertyData[];
 
+    const hasTagsProperty = validProps.some(
+      (p) => p.propertyName === "md_tags",
+    );
+    const propsWithoutTags = validProps.filter(
+      (p) => p.propertyName !== "md_tags",
+    );
+
     const { filledProperties, emptyProperties } =
-      separatePropertiesByValue(validProps);
+      separatePropertiesByValue(propsWithoutTags);
     const fileContent = await readFileContent(entry.file);
     // remove embedded bases, e.g.: ![[Inbox/_data/base.base#OmniSingleItem|base]]
     const fileContentWithoutEmbeddedBases = fileContent.replace(
@@ -187,6 +223,7 @@
       filledProperties,
       emptyProperties,
       fileContent: fileContentWithoutEmbeddedBases,
+      hasTagsProperty,
     };
   }
 
@@ -210,7 +247,52 @@
     // Update search value from file frontmatter
     updateSearchStateFromFile();
 
+    // Update tag state from file frontmatter
+    updateTagsStateFromFile();
+
     return entryData;
+  }
+
+  function frontmatterToStringArray(raw: unknown): string[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.filter((x) => x != null).map(String);
+    return [String(raw)];
+  }
+
+  function updateTagsStateFromFile() {
+    const fm = getActiveFileMetadata()?.frontmatter;
+    listTags = frontmatterToStringArray(fm?.["md_list_tags"]);
+    hiddenTags = frontmatterToStringArray(fm?.["md_list_tags_hidden"]);
+  }
+
+  function getEntryTags(entry: BasesEntry): string[] {
+    const value: { data: unknown } | null = entry.getValue(
+      "note.md_tags",
+    ) as any;
+    if (!value) return [];
+    return frontmatterToStringArray(value.data);
+  }
+
+  function toggleHiddenTag(tag: string) {
+    const file = app.workspace.activeEditor?.file;
+    if (!file) return;
+    app.fileManager.processFrontMatter(file, (fm) => {
+      const arr = frontmatterToStringArray(fm["md_list_tags_hidden"]);
+      const idx = arr.indexOf(tag);
+      if (idx >= 0) arr.splice(idx, 1);
+      else arr.push(tag);
+      fm["md_list_tags_hidden"] = arr;
+    });
+  }
+
+  function toggleEntryTag(entry: BasesEntry, tag: string) {
+    app.fileManager.processFrontMatter(entry.file, (fm) => {
+      const arr = frontmatterToStringArray(fm["md_tags"]);
+      const idx = arr.indexOf(tag);
+      if (idx >= 0) arr.splice(idx, 1);
+      else arr.push(tag);
+      fm["md_tags"] = arr;
+    });
   }
 
   async function processProperty(
@@ -611,18 +693,6 @@
         {/each}
       </select>
 
-      <div class="search-group">
-        <label for="list-search-input">Search:</label>
-        <input
-          id="list-search-input"
-          type="text"
-          class="search-input"
-          placeholder="Search..."
-          value={searchValue}
-          oninput={handleSearchChange}
-        />
-      </div>
-
       <div class="target-filter-group">
         <label for="target-filter-select" class="filter-label">Show:</label>
         <select
@@ -635,10 +705,57 @@
           <option value="empty">Empty Targets</option>
         </select>
       </div>
+
+      {#if listTags.length > 0}
+        <div class="filter-separator"></div>
+        <div class="tag-cloud filter-tag-cloud">
+          {#each tagCloud as t (t.name)}
+            <button
+              class="tag-button"
+              class:tag-hidden={t.hidden}
+              class:tag-zero={t.count === 0}
+              onclick={() => toggleHiddenTag(t.name)}
+            >
+              {t.name}<span class="tag-count">{t.count}</span>
+            </button>
+          {/each}
+        </div>
+        <div class="filter-separator"></div>
+      {/if}
+
+      <div class="search-group">
+        {#if showSearch || searchValue}
+          <label for="list-search-input">Search:</label>
+          <input
+            id="list-search-input"
+            type="text"
+            class="search-input"
+            placeholder="Search..."
+            value={searchValue}
+            oninput={handleSearchChange}
+            bind:this={searchInputEl}
+            onblur={() => {
+              if (!searchValue) showSearch = false;
+            }}
+          />
+        {:else}
+          <button
+            class="search-toggle-btn"
+            aria-label="Search"
+            onclick={() => {
+              showSearch = true;
+              setTimeout(() => searchInputEl?.focus(), 0);
+            }}
+          >
+            🔍
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 
-  {#each entryData as { entry, filledProperties, emptyProperties, fileContent }, index (entry.file.path)}
+  {#each entryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty }, index (entry.file.path)}
+    {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
     <div class="entry {getEntryClasses(entry)}">
       {#each filledProperties as propData (propData.propertyFull)}
         <div class="property">
@@ -680,6 +797,25 @@
             onchange={() => {}}
             onClick={() => handleFileContentClick(entry)}
           />
+        </div>
+      {/if}
+      {#if hasTagsProperty}
+        <div class="property">
+          <label class="property-label" for={`${entry.file.path}-md_tags`}
+            >Tags</label
+          >
+          <div class="tag-cloud entry-tag-cloud">
+            {#each tagCloud as t (t.name)}
+              <button
+                class="tag-button"
+                class:tag-selected={entryTags.includes(t.name)}
+                class:tag-zero={t.count === 0}
+                onclick={() => toggleEntryTag(entry, t.name)}
+              >
+                {t.name}<span class="tag-count">{t.count}</span>
+              </button>
+            {/each}
+          </div>
         </div>
       {/if}
       {#if emptyProperties.length > 0}
@@ -771,6 +907,21 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .search-toggle-btn {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 0.9rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .search-toggle-btn:hover {
+    border-color: var(--interactive-accent);
   }
 
   .search-group label {
@@ -912,5 +1063,71 @@
     color: grey;
     font-weight: 500;
     text-decoration: line-through;
+  }
+
+  .filter-separator {
+    width: 1px;
+    align-self: stretch;
+    background-color: var(--background-modifier-border);
+    margin: 0 0.25rem;
+  }
+
+  .tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+  }
+
+  .filter-tag-cloud {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .entry-tag-cloud {
+    padding: 0.25rem 0;
+  }
+
+  .tag-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 999px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1.2;
+  }
+
+  .tag-button:hover {
+    border-color: var(--interactive-accent);
+  }
+
+  .tag-button .tag-count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  .tag-button.tag-zero {
+    opacity: 0.45;
+  }
+
+  .tag-button.tag-hidden {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  .tag-button.tag-selected {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+  }
+
+  .tag-button.tag-selected .tag-count {
+    color: var(--text-on-accent);
+    opacity: 0.8;
   }
 </style>

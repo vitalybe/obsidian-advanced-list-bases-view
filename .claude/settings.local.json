@@ -1,5 +1,8 @@
 {
   "permissions": {
+    "additionalDirectories": [
+      "/Users/vitaly/hq/obsidian/"
+    ],
     "allow": [
       "Bash(pnpm run:*)",
       "WebFetch(domain:www.moritzjung.dev)",
