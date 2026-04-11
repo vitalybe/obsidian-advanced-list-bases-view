@@ -61,8 +61,9 @@
   // Tag state
   let listTags = $state<string[]>([]);
   let hiddenTags = $state<string[]>([]);
+  let onlyShowTags = $state<string[]>([]);
 
-  let tagCloud = $derived.by(() => {
+  let tagCounts = $derived.by(() => {
     const counts = new Map<string, number>();
     for (const tag of listTags) counts.set(tag, 0);
     for (const ed of entryData) {
@@ -70,18 +71,37 @@
         counts.set(t, (counts.get(t) ?? 0) + 1);
       }
     }
-    const all = Array.from(counts.entries()).map(([name, count]) => ({
-      name,
-      count,
-      hidden: hiddenTags.includes(name),
-    }));
-    const sortFn = (
-      a: { name: string; count: number },
-      b: { name: string; count: number },
-    ) => b.count - a.count || a.name.localeCompare(b.name);
-    const visible = all.filter((t) => !t.hidden).sort(sortFn);
-    const hidden = all.filter((t) => t.hidden).sort(sortFn);
-    return [...visible, ...hidden];
+    return counts;
+  });
+
+  let tagCloud = $derived.by(() => {
+    const names = new Set<string>([...listTags, ...tagCounts.keys()]);
+    return [...names]
+      .sort(
+        (a, b) =>
+          (tagCounts.get(b) ?? 0) - (tagCounts.get(a) ?? 0) ||
+          a.localeCompare(b),
+      )
+      .map((name) => ({
+        name,
+        count: tagCounts.get(name) ?? 0,
+        hidden: hiddenTags.includes(name),
+        onlyShow: onlyShowTags.includes(name),
+      }));
+  });
+
+  let visibleEntryData = $derived.by(() => {
+    return entryData.filter((ed) => {
+      if (!ed.hasTagsProperty) return true;
+      const tags = getEntryTags(ed.entry);
+      if (onlyShowTags.length > 0) {
+        if (!tags.some((t) => onlyShowTags.includes(t))) return false;
+      }
+      if (hiddenTags.length > 0) {
+        if (tags.some((t) => hiddenTags.includes(t))) return false;
+      }
+      return true;
+    });
   });
 
   // Track active target
@@ -263,6 +283,7 @@
     const fm = getActiveFileMetadata()?.frontmatter;
     listTags = frontmatterToStringArray(fm?.["md_list_tags"]);
     hiddenTags = frontmatterToStringArray(fm?.["md_list_tags_hidden"]);
+    onlyShowTags = frontmatterToStringArray(fm?.["md_list_tags_only_show"]);
   }
 
   function getEntryTags(entry: BasesEntry): string[] {
@@ -273,15 +294,25 @@
     return frontmatterToStringArray(value.data);
   }
 
-  function toggleHiddenTag(tag: string) {
+  function cycleTagState(tag: string) {
     const file = app.workspace.activeEditor?.file;
     if (!file) return;
+    const wasOnly = onlyShowTags.includes(tag);
+    const wasHidden = hiddenTags.includes(tag);
     app.fileManager.processFrontMatter(file, (fm) => {
-      const arr = frontmatterToStringArray(fm["md_list_tags_hidden"]);
-      const idx = arr.indexOf(tag);
-      if (idx >= 0) arr.splice(idx, 1);
-      else arr.push(tag);
-      fm["md_list_tags_hidden"] = arr;
+      const onlyArr = frontmatterToStringArray(fm["md_list_tags_only_show"]);
+      const hiddenArr = frontmatterToStringArray(fm["md_list_tags_hidden"]);
+      const oIdx = onlyArr.indexOf(tag);
+      if (oIdx >= 0) onlyArr.splice(oIdx, 1);
+      const hIdx = hiddenArr.indexOf(tag);
+      if (hIdx >= 0) hiddenArr.splice(hIdx, 1);
+      if (!wasOnly && !wasHidden) {
+        onlyArr.push(tag);
+      } else if (wasOnly) {
+        hiddenArr.push(tag);
+      }
+      fm["md_list_tags_only_show"] = onlyArr;
+      fm["md_list_tags_hidden"] = hiddenArr;
     });
   }
 
@@ -713,8 +744,9 @@
             <button
               class="tag-button"
               class:tag-hidden={t.hidden}
+              class:tag-only-show={t.onlyShow}
               class:tag-zero={t.count === 0}
-              onclick={() => toggleHiddenTag(t.name)}
+              onclick={() => cycleTagState(t.name)}
             >
               {t.name}<span class="tag-count">{t.count}</span>
             </button>
@@ -754,7 +786,7 @@
     </div>
   {/if}
 
-  {#each entryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty }, index (entry.file.path)}
+  {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty }, index (entry.file.path)}
     {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
     <div class="entry {getEntryClasses(entry)}">
       {#each filledProperties as propData (propData.propertyFull)}
@@ -799,30 +831,31 @@
           />
         </div>
       {/if}
-      {#if hasTagsProperty}
+      {#if hasTagsProperty && entryTags.length > 0}
         <div class="property">
           <label class="property-label" for={`${entry.file.path}-md_tags`}
             >Tags</label
           >
           <div class="tag-cloud entry-tag-cloud">
-            {#each tagCloud as t (t.name)}
+            {#each entryTags as tagName (tagName)}
               <button
-                class="tag-button"
-                class:tag-selected={entryTags.includes(t.name)}
-                class:tag-zero={t.count === 0}
-                onclick={() => toggleEntryTag(entry, t.name)}
+                class="tag-button tag-selected"
+                onclick={() => toggleEntryTag(entry, tagName)}
               >
-                {t.name}<span class="tag-count">{t.count}</span>
+                {tagName}
               </button>
             {/each}
           </div>
         </div>
       {/if}
-      {#if emptyProperties.length > 0}
+      {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}
         <div class="empty-properties-container">
           {#each emptyProperties as propData (propData.propertyFull)}
             <span class="empty-property-label">{propData.label}</span>
           {/each}
+          {#if hasTagsProperty && entryTags.length === 0}
+            <span class="empty-property-label">Tags</span>
+          {/if}
         </div>
       {/if}
       <div class="actions-container">
@@ -857,7 +890,7 @@
           initiallyExpanded={getAreTargetsShown(entry)}
         />
       </div>
-      {#if index < entryData.length - 1}
+      {#if index < visibleEntryData.length - 1}
         <hr class="entry-separator" />
       {/if}
     </div>
@@ -1120,14 +1153,14 @@
     opacity: 0.55;
   }
 
+  .tag-button.tag-only-show {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px #2563eb, 0 0 8px rgba(59, 130, 246, 0.7);
+  }
+
   .tag-button.tag-selected {
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
     border-color: var(--interactive-accent);
-  }
-
-  .tag-button.tag-selected .tag-count {
-    color: var(--text-on-accent);
-    opacity: 0.8;
   }
 </style>
