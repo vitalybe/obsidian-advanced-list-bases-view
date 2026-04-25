@@ -55,8 +55,96 @@
       emptyProperties: PropertyData[];
       fileContent: string;
       hasTagsProperty: boolean;
+      imageUrl: string | null;
     }>
   >([]);
+
+  const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?[^\s)"']*)?$/i;
+
+  function resolveWikiImage(
+    linkPath: string,
+    sourcePath: string,
+  ): string | null {
+    const f = app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
+    if (f) return app.vault.getResourcePath(f);
+    return null;
+  }
+
+  function findImageInText(text: string, sourcePath: string): string | null {
+    if (!text) return null;
+    const mdImg = text.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+    if (mdImg) return mdImg[1];
+    const wiki = text.match(
+      /!\[\[([^\]|]+?\.(?:png|jpe?g|gif|webp|svg|bmp|avif))(?:\|[^\]]*)?\]\]/i,
+    );
+    if (wiki) {
+      const resolved = resolveWikiImage(wiki[1], sourcePath);
+      if (resolved) return resolved;
+    }
+    const urlMatch = text.match(
+      /(https?:\/\/[^\s)"']+?\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:\?[^\s)"']*)?)/i,
+    );
+    if (urlMatch) return urlMatch[1];
+    return null;
+  }
+
+  function findImageInValue(raw: unknown, sourcePath: string): string | null {
+    if (raw == null) return null;
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        const found = findImageInValue(item, sourcePath);
+        if (found) return found;
+      }
+      return null;
+    }
+    const str = String(raw).trim();
+    if (!str) return null;
+    const fromText = findImageInText(str, sourcePath);
+    if (fromText) return fromText;
+    if (/^https?:\/\//i.test(str) && IMAGE_EXT_RE.test(str)) return str;
+    if (IMAGE_EXT_RE.test(str) && !str.includes(" ")) {
+      const resolved = resolveWikiImage(str, sourcePath);
+      if (resolved) return resolved;
+    }
+    return null;
+  }
+
+  function extractEntryImage(
+    entry: BasesEntry,
+    filledProperties: PropertyData[],
+    fileContent: string,
+  ): string | null {
+    const sourcePath = entry.file.path;
+
+    const fm = app.metadataCache.getFileCache(entry.file)?.frontmatter;
+    if (fm) {
+      const preferredKeys = ["md_image", "md_thumbnail", "md_thumb", "image"];
+      for (const key of preferredKeys) {
+        if (key in fm) {
+          const found = findImageInValue(fm[key], sourcePath);
+          if (found) return found;
+        }
+      }
+      for (const key of Object.keys(fm)) {
+        if (preferredKeys.includes(key)) continue;
+        const found = findImageInValue(fm[key], sourcePath);
+        if (found) return found;
+      }
+    }
+
+    for (const p of filledProperties) {
+      let str: string;
+      try {
+        str = p.value.toString();
+      } catch {
+        continue;
+      }
+      const found = findImageInValue(str, sourcePath);
+      if (found) return found;
+    }
+
+    return findImageInText(fileContent, sourcePath);
+  }
 
   // Tag state
   let listTags = $state<string[]>([]);
@@ -215,6 +303,8 @@
     filledProperties: PropertyData[];
     emptyProperties: PropertyData[];
     fileContent: string;
+    hasTagsProperty: boolean;
+    imageUrl: string | null;
   }> {
     const props = await Promise.all(
       properties.map(async (prop) => await processProperty(entry, prop)),
@@ -238,12 +328,19 @@
     );
     console.log("fileContent", fileContentWithoutEmbeddedBases);
 
+    const imageUrl = extractEntryImage(
+      entry,
+      filledProperties,
+      fileContentWithoutEmbeddedBases,
+    );
+
     return {
       entry,
       filledProperties,
       emptyProperties,
       fileContent: fileContentWithoutEmbeddedBases,
       hasTagsProperty,
+      imageUrl,
     };
   }
 
@@ -699,6 +796,14 @@
     await leaf.openFile(entry.file);
   }
 
+  function getPropertyUrl(propData: PropertyData): string | null {
+    try {
+      const str = propData.value.toString().trim();
+      if (/^https?:\/\//i.test(str)) return str;
+    } catch {}
+    return null;
+  }
+
   function isOmniList(): boolean {
     const metadata = getActiveFileMetadata();
     if (!metadata?.frontmatter) return false;
@@ -786,115 +891,126 @@
     </div>
   {/if}
 
-  {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty }, index (entry.file.path)}
-    {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
-    <div class="entry {getEntryClasses(entry)}">
-      {#each filledProperties as propData (propData.propertyFull)}
-        <div class="property">
-          <label
-            class="property-label"
-            for={`${entry.file.path}-${propData.propertyFull}`}
-            >{propData.label}</label
-          >
-          {#if propData.propertyType === "note"}
-            <EditableTextarea
-              {renderContext}
-              {app}
-              sourcePath={entry.file.path}
-              id={`${entry.file.path}-${propData.propertyFull}`}
-              value={propData.value}
-              onchange={(newValue) =>
-                handlePropertyChange(entry, propData.propertyName, newValue)}
-            />
+  <div class="cards-grid">
+    {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty, imageUrl } (entry.file.path)}
+      {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
+      {@const entryLink = extractEntryLink(entry)}
+      <div class="card {getEntryClasses(entry)}">
+        <button
+          class="card-image-area"
+          class:card-image-empty={!imageUrl}
+          aria-label={`Open ${entry.file.basename}`}
+          onclick={() => handleFileContentClick(entry)}
+        >
+          {#if imageUrl}
+            <img src={imageUrl} alt="" loading="lazy" />
           {:else}
-            <span
-              class="property-value"
-              use:renderPropertyValue={propData.value}
-            ></span>
+            <span class="card-image-placeholder">📄</span>
           {/if}
-        </div>
-      {/each}
-      {#if fileContent && fileContent?.trim()?.length > 0 && isOmniList()}
-        <div class="property">
-          <label class="property-label" for={`${entry.file.path}-content`}
-            >Content ({fileContent.length} characters)</label
-          >
-          <EditableTextarea
-            {renderContext}
-            {app}
-            sourcePath={entry.file.path}
-            id={`${entry.file.path}-content`}
-            value={fileContent}
-            readonly={true}
-            onchange={() => {}}
-            onClick={() => handleFileContentClick(entry)}
-          />
-        </div>
-      {/if}
-      {#if hasTagsProperty && entryTags.length > 0}
-        <div class="property">
-          <label class="property-label" for={`${entry.file.path}-md_tags`}
-            >Tags</label
-          >
-          <div class="tag-cloud entry-tag-cloud">
-            {#each entryTags as tagName (tagName)}
-              <button
-                class="tag-button tag-selected"
-                onclick={() => toggleEntryTag(entry, tagName)}
+        </button>
+        <div class="card-body">
+          {#each filledProperties.filter((p) => !getPropertyUrl(p)) as propData (propData.propertyFull)}
+            <div class="property">
+              <label
+                class="property-label"
+                for={`${entry.file.path}-${propData.propertyFull}`}
+                >{propData.label}</label
               >
-                {tagName}
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-      {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}
-        <div class="empty-properties-container">
-          {#each emptyProperties as propData (propData.propertyFull)}
-            <span class="empty-property-label">{propData.label}</span>
+              {#if propData.propertyType === "note"}
+                <EditableTextarea
+                  {renderContext}
+                  {app}
+                  sourcePath={entry.file.path}
+                  id={`${entry.file.path}-${propData.propertyFull}`}
+                  value={propData.value}
+                  onchange={(newValue) =>
+                    handlePropertyChange(
+                      entry,
+                      propData.propertyName,
+                      newValue,
+                    )}
+                />
+              {:else}
+                <span
+                  class="property-value"
+                  use:renderPropertyValue={propData.value}
+                ></span>
+              {/if}
+            </div>
           {/each}
-          {#if hasTagsProperty && entryTags.length === 0}
-            <span class="empty-property-label">Tags</span>
+          {#if filledProperties.some((p) => getPropertyUrl(p))}
+            <div class="link-properties-row">
+              {#each filledProperties.filter((p) => getPropertyUrl(p)) as propData (propData.propertyFull)}
+                <a
+                  class="link-property"
+                  href={getPropertyUrl(propData)}
+                  target="_blank"
+                  rel="noopener"
+                >{propData.label}</a>
+              {/each}
+            </div>
+          {/if}
+          {#if hasTagsProperty && entryTags.length > 0}
+            <div class="property">
+              <label class="property-label" for={`${entry.file.path}-md_tags`}
+                >Tags</label
+              >
+              <div class="tag-cloud entry-tag-cloud">
+                {#each entryTags as tagName (tagName)}
+                  <button
+                    class="tag-button tag-selected"
+                    onclick={() => toggleEntryTag(entry, tagName)}
+                  >
+                    {tagName}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+          <div class="target-controls">
+            <GroupsAndTargetsSelector
+              {entry}
+              {app}
+              propertyName="md_targets"
+              label="Targets:"
+              initiallyExpanded={getAreTargetsShown(entry)}
+            />
+          </div>
+          {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}
+            <div class="empty-properties-container">
+              {#each emptyProperties as propData (propData.propertyFull)}
+                <span class="empty-property-label">{propData.label}</span>
+              {/each}
+              {#if hasTagsProperty && entryTags.length === 0}
+                <span class="empty-property-label">Tags</span>
+              {/if}
+            </div>
           {/if}
         </div>
-      {/if}
-      <div class="actions-container">
-        {#if activeTarget}
-          {@const entryLink = extractEntryLink(entry)}
-          <button
-            class="btn-primary"
-            onclick={() => handleWatch(entry)}
-            disabled={!entryLink}
-          >
-            Watch ({activeTargetLabel})
+        <div class="actions-container">
+          {#if activeTarget}
+            <span class="active-target-chip">{activeTargetLabel}</span>
+            {#if entryLink}
+              <button class="btn-primary" onclick={() => handleWatch(entry)}>
+                Watch
+              </button>
+            {/if}
+            <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>
+              {isEntryMarkedAsRead(entry) ? "Unmark" : "Mark Read"}
+            </button>
+          {/if}
+          {#if entryLink}
+            <button class="btn-regular" onclick={() => openRedditUrl(entry)}>
+              Open
+            </button>
+          {/if}
+          <button class="btn-destructive" onclick={() => handleRemove(entry)}>
+            {isEntryMarkedAsDone(entry) ? "Restore" : "Remove"}
           </button>
-          <button class="btn-regular" onclick={() => handleMarkAsRead(entry)}>
-            {isEntryMarkedAsRead(entry)
-              ? `Unmark Read (${activeTargetLabel})`
-              : `Mark Read (${activeTargetLabel})`}
-          </button>
-        {/if}
-        <button class="btn-regular" onclick={() => openRedditUrl(entry)}>
-          Open
-        </button>
-        <button class="btn-destructive" onclick={() => handleRemove(entry)}>
-          {isEntryMarkedAsDone(entry) ? "Restore" : "Remove"}
-        </button>
+        </div>
       </div>
-      <div class="target-controls">
-        <GroupsAndTargetsSelector
-          {entry}
-          {app}
-          propertyName="md_targets"
-          label="Targets:"
-          initiallyExpanded={getAreTargetsShown(entry)}
-        />
-      </div>
-      {#if index < visibleEntryData.length - 1}
-        <hr class="entry-separator" />
-      {/if}
-    </div>
-  {/each}
+    {/each}
+  </div>
 </div>
 
 <style>
@@ -991,38 +1107,102 @@
     white-space: nowrap;
   }
 
-  .entry {
-    margin-bottom: 0.5rem;
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .card {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.5rem;
+    padding: 0;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition:
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
   }
 
-  .entry-separator {
-    margin: 1rem 0;
+  .card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  .card-image-area {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 180px;
+    padding: 0;
     border: none;
-    border-top: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    cursor: pointer;
+    overflow: hidden;
   }
 
+  .card-image-empty {
+    height: auto;
+    min-height: 2rem;
+  }
+
+  .card-image-area img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .card-image-area:hover img {
+    transform: scale(1.02);
+    transition: transform 0.2s ease;
+  }
+
+  .card-image-placeholder {
+    font-size: 2.5rem;
+    opacity: 0.35;
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0 5px;
+    flex: 1;
+  }
+
+  .card-entry-about-to-disappear,
   .entry-about-to-disappear {
     opacity: 0.5;
   }
 
   .entry-targets-empty {
-    background-color: hsla(2, 88%, 59%, 0.2);
+    background-color: hsla(2, 88%, 59%, 0.15);
+    border-color: hsla(2, 88%, 59%, 0.5);
+  }
+
+  .entry-targets-empty .card-image-area {
+    background-color: hsla(2, 88%, 59%, 0.1);
   }
 
   .property {
     display: flex;
     flex-direction: column;
-    margin-bottom: 0.25rem;
-    gap: 0.25rem;
+    margin-bottom: 0.1rem;
+    gap: 0.1rem;
   }
 
   .property-label {
-    font-weight: bold;
-    font-size: 0.9rem;
+    font-weight: 600;
+    font-size: 0.85rem;
   }
 
   .error {
@@ -1032,24 +1212,35 @@
 
   .actions-container {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    gap: 0.3rem;
+    padding: 0.45rem 0.6rem 0.55rem 0.6rem;
+    border-top: 1px solid var(--background-modifier-border);
     flex-wrap: wrap;
+    align-items: center;
+    margin-top: auto;
+  }
+
+  .active-target-chip {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.15rem 0.1rem 0.15rem 0;
+    white-space: nowrap;
   }
 
   .btn-primary,
   .btn-regular,
   .btn-destructive {
-    padding: 0.4rem 0.8rem;
+    padding: 0.25rem 0.55rem;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     font-weight: 500;
     transition: opacity 0.2s;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.3rem;
   }
 
   .btn-primary {
@@ -1081,19 +1272,41 @@
     flex-wrap: wrap;
   }
 
+  .link-properties-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .link-property {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--link-color, var(--interactive-accent));
+    text-decoration: none;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    background-color: var(--background-secondary);
+  }
+
+  .link-property:hover {
+    text-decoration: underline;
+    background-color: var(--background-modifier-hover);
+  }
+
   .empty-properties-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+    padding-top: 0.3rem;
     border-top: 1px solid var(--background-modifier-border);
-    opacity: 0.5;
+    opacity: 0.55;
   }
 
   .empty-property-label {
-    font-size: 0.85rem;
-    color: grey;
+    font-size: 0.7rem;
+    color: var(--text-muted);
     font-weight: 500;
     text-decoration: line-through;
   }
@@ -1155,7 +1368,9 @@
 
   .tag-button.tag-only-show {
     border-color: #2563eb;
-    box-shadow: 0 0 0 1px #2563eb, 0 0 8px rgba(59, 130, 246, 0.7);
+    box-shadow:
+      0 0 0 1px #2563eb,
+      0 0 8px rgba(59, 130, 246, 0.7);
   }
 
   .tag-button.tag-selected {

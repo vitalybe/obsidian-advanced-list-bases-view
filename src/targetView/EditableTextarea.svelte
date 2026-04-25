@@ -188,8 +188,8 @@
   .property-view {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
+    border: 0;
+    border-radius: 0;
     background-color: var(--background-secondary);
     color: var(--text-normal);
     cursor: pointer;
