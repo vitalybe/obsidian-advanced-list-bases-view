@@ -3,6 +3,9 @@ import process from "process";
 import builtins from "builtin-modules";
 import esbuildSvelte from "esbuild-svelte";
 import sveltePreprocess from "svelte-preprocess";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const banner =
 `/*
@@ -13,6 +16,39 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 
+// Directory of this repo.
+const repoDir = path.dirname(fileURLToPath(import.meta.url));
+
+// Where the built plugin should be synced so Obsidian can load it.
+// Override with the OBSIDIAN_PLUGIN_DIR env var if your vault lives elsewhere.
+const vaultPluginDir =
+	process.env.OBSIDIAN_PLUGIN_DIR ||
+	path.resolve(repoDir, "../../obsidian/.obsidian/plugins/advanced-list-bases-view");
+
+// After every successful build, copy the artifacts into the vault plugin
+// folder. Combined with the `.hotreload` marker there, the hot-reload plugin
+// picks up the changed main.js/styles.css and reloads the plugin live.
+const syncToVaultPlugin = {
+	name: "sync-to-vault",
+	setup(build) {
+		build.onEnd((result) => {
+			if (result.errors.length > 0) return;
+			try {
+				fs.mkdirSync(vaultPluginDir, { recursive: true });
+				for (const file of ["main.js", "manifest.json", "styles.css"]) {
+					const src = path.resolve(repoDir, file);
+					if (fs.existsSync(src)) {
+						fs.copyFileSync(src, path.join(vaultPluginDir, file));
+					}
+				}
+				console.log(`[sync-to-vault] synced to ${vaultPluginDir}`);
+			} catch (e) {
+				console.error(`[sync-to-vault] failed: ${e.message}`);
+			}
+		});
+	},
+};
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
@@ -22,6 +58,7 @@ const context = await esbuild.context({
 			compilerOptions: { css: "injected" },
 			preprocess: sveltePreprocess(),
 		}),
+		syncToVaultPlugin,
 	],
 	entryPoints: ["src/main.ts"],
 	bundle: true,
