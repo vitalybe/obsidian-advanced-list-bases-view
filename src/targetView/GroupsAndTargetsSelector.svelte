@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { App, BasesEntry, FrontMatterCache } from "obsidian";
-  import type { DefinedTarget, GroupDef } from "./targetTypes";
+  import { formatTarget, type DefinedTarget, type GroupDef } from "./targetTypes";
 
   let {
     entry,
@@ -90,10 +90,6 @@
 
   function isChecked(target: DefinedTarget): boolean {
     return getTargetState(target) !== "none";
-  }
-
-  function formatTarget(target: DefinedTarget): string {
-    return `${target.icon} ${target.value}`;
   }
 
   function getSelectedTargetsDisplay(): string {

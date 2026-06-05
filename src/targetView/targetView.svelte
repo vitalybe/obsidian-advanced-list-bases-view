@@ -17,7 +17,7 @@
   import type { Writable } from "svelte/store";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
   import EditableTextarea from "./EditableTextarea.svelte";
-  import { EMPTY_ROSTER, type DefinedTarget, type Roster } from "./targetTypes";
+  import { EMPTY_ROSTER, formatTarget, type Roster } from "./targetTypes";
   import { TargetRoster } from "./targetRoster";
   import type { TargetViewStoreData } from "./targetView.ts";
 
@@ -509,9 +509,6 @@
     };
   }
 
-  function formatTarget(target: DefinedTarget): string {
-    return `${target.icon} ${target.value}`;
-  }
 
   function getActiveFileTarget(): string | undefined {
     let target: string | undefined;

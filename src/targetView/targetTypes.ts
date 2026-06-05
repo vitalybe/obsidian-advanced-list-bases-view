@@ -26,3 +26,7 @@ export const ROSTER_GROUPS_KEY = "md_targets_groups";
 export const ROSTER_PEOPLE_KEY = "md_targets_people";
 
 export const EMPTY_ROSTER: Roster = { groups: [], targets: [] };
+
+export function formatTarget(target: DefinedTarget): string {
+  return target.icon ? `${target.icon} ${target.value}` : target.value;
+}
