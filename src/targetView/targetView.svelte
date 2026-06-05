@@ -195,7 +195,19 @@
 
   // Track active target
   let activeTarget = $state<string | undefined>(undefined);
-  let activeTargetLabel = $state<string | undefined>(undefined);
+  // Groups/people roster loaded from the config note (see loader effect below).
+  let roster = $state<Roster>(EMPTY_ROSTER);
+  // Derived so it recomputes when the roster loads asynchronously (otherwise the
+  // chip would be stuck on the raw value computed during processEntries).
+  let activeTargetLabel = $derived.by(() => {
+    let result: string | undefined = undefined;
+    if (activeTarget) {
+      const target = roster.targets.find((t) => t.value === activeTarget);
+      // Fall back to the raw value so the chip never blanks on an empty roster.
+      result = target ? formatTarget(target) : activeTarget;
+    }
+    return result;
+  });
 
   // Filter state: "all", "filled", "empty"
   let targetFilter = $state<"all" | "filled" | "empty">("all");
@@ -224,10 +236,9 @@
     }
   });
 
-  // Groups/people roster loaded from the config note (md_targets_source_path on
-  // the active list note, else the default note). Reloaded on each data update
-  // so it settles once the active file and config note are available.
-  let roster = $state<Roster>(EMPTY_ROSTER);
+  // Loads the roster from the config note (md_targets_source_path on the active
+  // list note, else the default note). Reloaded on each data update so it
+  // settles once the active file and config note are available.
   $effect(() => {
     // Re-run when entries change (data-update cycle).
     void entries;
@@ -371,10 +382,9 @@
       entries.map((entry) => processEntry(entry, properties)),
     );
 
-    // Update active target info
+    // Update active target info (activeTargetLabel derives from this + roster)
     activeTarget = getActiveFileTarget();
-    activeTargetLabel = getActiveFileTargetLabel();
-    debugLog("Updated activeTarget:", activeTarget, activeTargetLabel);
+    debugLog("Updated activeTarget:", activeTarget);
 
     // Update filter state from file frontmatter
     updateFilterStateFromFile();
@@ -518,17 +528,6 @@
     }
 
     return target;
-  }
-
-  function getActiveFileTargetLabel(): string | undefined {
-    const targetValue = getActiveFileTarget();
-    let result: string | undefined = undefined;
-    if (targetValue) {
-      const target = roster.targets.find((t) => t.value === targetValue);
-      // Fall back to the raw value so the chip never goes blank on an empty roster.
-      result = target ? formatTarget(target) : targetValue;
-    }
-    return result;
   }
 
   function determineFilterState(
