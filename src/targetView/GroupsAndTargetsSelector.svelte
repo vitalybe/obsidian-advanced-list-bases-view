@@ -41,9 +41,20 @@
     return app.metadataCache.getFileCache(entry.file) ?? undefined;
   }
 
+  // Frontmatter values may be a list or a bare scalar (e.g. `md_targets: Eli`).
+  // Normalize to an array so both reads and writes are safe.
+  function asStringArray(value: unknown): string[] {
+    let result: string[];
+    if (Array.isArray(value)) {
+      result = value as string[];
+    } else {
+      result = value === undefined || value === null ? [] : [value as string];
+    }
+    return result;
+  }
+
   function readList(key: string): string[] {
-    const result = getEntryFileMetadata()?.frontmatter?.[key] ?? [];
-    return Array.isArray(result) ? result : [result];
+    return asStringArray(getEntryFileMetadata()?.frontmatter?.[key]);
   }
 
   type TargetState = "none" | "active" | "done";
@@ -89,8 +100,8 @@
   function toggleActive(target: DefinedTarget): void {
     const state = getTargetState(target);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const activeList = (frontmatter[propertyName] as string[]) ?? [];
-      const doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      const activeList = asStringArray(frontmatter[propertyName]);
+      const doneList = asStringArray(frontmatter[donePropertyName]);
       if (state === "none") {
         if (!activeList.includes(target.value)) activeList.push(target.value);
       } else {
@@ -107,8 +118,8 @@
     const state = getTargetState(target);
     if (state === "none") return;
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const activeList = (frontmatter[propertyName] as string[]) ?? [];
-      const doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      const activeList = asStringArray(frontmatter[propertyName]);
+      const doneList = asStringArray(frontmatter[donePropertyName]);
       if (state === "done") {
         removeValue(doneList, target.value);
       } else {
@@ -149,8 +160,8 @@
     const members = getGroupMembers(group);
     const fullySelected = isGroupFullySelected(group);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      let activeList = (frontmatter[propertyName] as string[]) ?? [];
-      let doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      let activeList = asStringArray(frontmatter[propertyName]);
+      let doneList = asStringArray(frontmatter[donePropertyName]);
       if (fullySelected) {
         const memberValues = new Set(members.map((m) => m.value));
         activeList = activeList.filter((value) => !memberValues.has(value));
