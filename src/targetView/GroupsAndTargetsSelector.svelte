@@ -21,17 +21,48 @@
   } = $props();
 
   let isOpen = $state(false);
-  let rootEl = $state<HTMLDivElement>();
+  let triggerEl = $state<HTMLButtonElement>();
+  let panelEl = $state<HTMLDivElement>();
+  let panelPos = $state({ top: 0, left: 0, width: 0 });
 
-  // Close the panel when clicking outside of it. The listener is registered only
-  // while open so we don't leak one document handler per card.
+  // Render the panel under <body> so it escapes the card's overflow:hidden.
+  function portal(node: HTMLElement): { destroy: () => void } {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  function updatePanelPosition(): void {
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    panelPos = { top: rect.bottom + 4, left: rect.left, width: rect.width };
+  }
+
+  // Keep the portaled panel anchored to the trigger while open.
+  $effect(() => {
+    if (!isOpen) return;
+    updatePanelPosition();
+    const reposition = () => updatePanelPosition();
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  });
+
+  // Close on outside click. The panel lives in <body>, so check both the trigger
+  // and the panel. Registered only while open so we don't leak handlers.
   $effect(() => {
     if (!isOpen) return;
     const onDocClick = (event: MouseEvent) => {
       const target = event.target as Node | null;
-      if (rootEl && target && !rootEl.contains(target)) {
-        isOpen = false;
-      }
+      if (!target) return;
+      const inside = triggerEl?.contains(target) || panelEl?.contains(target);
+      if (!inside) isOpen = false;
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -198,11 +229,15 @@
   const noTargets = $derived(summary === "(none)");
 </script>
 
-<div class="target-dropdown" bind:this={rootEl}>
+<div class="target-dropdown">
   <button
     class="dropdown-trigger"
     class:no-targets={noTargets}
-    onclick={() => (isOpen = !isOpen)}
+    bind:this={triggerEl}
+    onclick={() => {
+      isOpen = !isOpen;
+      if (isOpen) updatePanelPosition();
+    }}
     aria-expanded={isOpen}
   >
     <b>{label}</b>
@@ -211,7 +246,12 @@
   </button>
 
   {#if isOpen}
-    <div class="dropdown-panel">
+    <div
+      class="dropdown-panel"
+      use:portal
+      bind:this={panelEl}
+      style="top: {panelPos.top}px; left: {panelPos.left}px; width: {panelPos.width}px;"
+    >
       {#if groups.length === 0}
         <div class="dropdown-empty">
           No targets configured. Set <code>md_targets_source_path</code> on the
@@ -310,11 +350,10 @@
   }
 
   .dropdown-panel {
-    position: absolute;
-    z-index: 30;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
+    /* Portaled to <body>; top/left/width set inline, anchored to the trigger. */
+    position: fixed;
+    z-index: 9999;
+    min-width: 200px;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
