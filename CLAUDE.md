@@ -47,7 +47,7 @@ The view creates a container div with class `bases-advanced-list-container` for 
 
 - **Targets selector**: a grouped **multiselect dropdown**. Each member row has a left checkbox (active toggle) and a right eye icon (done toggle, only enabled when checked). Group headers bulk-select their members. The panel stays open for multiple picks and closes on click-outside.
 - **Data model** (per-card frontmatter): `md_targets` (active values; done items remain here too) and `md_targets_done` (subset marked done).
-- **Configurable roster**: groups/people are not hardcoded. `targetRoster.ts` (`TargetRoster.load`) reads them from a config note's YAML frontmatter via `vault.read` + `parseYaml`. The config note path comes from the active list note's `md_targets_source_path` frontmatter, falling back to `Meta/Targets.md`. An empty roster degrades gracefully (selector/filter show no people).
+- **Configurable roster**: groups/people are not hardcoded. `targetRoster.ts` (`TargetRoster.load`) reads them from a config note's YAML frontmatter via `vault.read` + `parseYaml`. The config note path comes from the active list note's `md_targets_source_path` frontmatter, falling back to `meta/Targets.md` (Obsidian path lookups are case-sensitive). An empty roster degrades gracefully (selector/filter show no people).
   - Config note keys: `md_targets_groups` (list of group names, or `{value,label}`) and `md_targets_people` (list of `{value, icon, groups}`).
 - **Reactivity**: `targetView.svelte` loads the roster into reactive state on each data-update cycle (not a static `$derived` over the cache) and passes `groups`/`targets` to the selector; the top filter and active-target label also source from the roster.
 

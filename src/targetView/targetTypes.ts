@@ -19,7 +19,9 @@ export interface Roster {
 export const TARGETS_SOURCE_PATH_PROPERTY = "md_targets_source_path";
 
 // Fallback config note used when the source path is missing or unreadable.
-export const DEFAULT_TARGETS_SOURCE_PATH = "Meta/Targets.md";
+// Note: Obsidian's getAbstractFileByPath is case-sensitive, so this must match
+// the real vault folder casing.
+export const DEFAULT_TARGETS_SOURCE_PATH = "meta/Targets.md";
 
 // Frontmatter keys inside the roster config note.
 export const ROSTER_GROUPS_KEY = "md_targets_groups";

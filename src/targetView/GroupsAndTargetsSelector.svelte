@@ -215,7 +215,7 @@
       {#if groups.length === 0}
         <div class="dropdown-empty">
           No targets configured. Set <code>md_targets_source_path</code> on the
-          list note, or create <code>Meta/Targets.md</code>.
+          list note, or create <code>meta/Targets.md</code>.
         </div>
       {/if}
       {#each groups as group (group.value)}
