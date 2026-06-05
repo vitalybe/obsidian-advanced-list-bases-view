@@ -17,7 +17,8 @@
   import type { Writable } from "svelte/store";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
   import EditableTextarea from "./EditableTextarea.svelte";
-  import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
+  import { EMPTY_ROSTER, type DefinedTarget, type Roster } from "./targetTypes";
+  import { TargetRoster } from "./targetRoster";
   import type { TargetViewStoreData } from "./targetView.ts";
 
   interface Props {
@@ -221,6 +222,23 @@
       // Update search state from file frontmatter when active file changes
       updateSearchStateFromFile();
     }
+  });
+
+  // Groups/people roster loaded from the config note (md_targets_source_path on
+  // the active list note, else the default note). Reloaded on each data update
+  // so it settles once the active file and config note are available.
+  let roster = $state<Roster>(EMPTY_ROSTER);
+  $effect(() => {
+    // Re-run when entries change (data-update cycle).
+    void entries;
+    const activeFile = app.workspace.activeEditor?.file ?? undefined;
+    let cancelled = false;
+    TargetRoster.load(app, activeFile).then((loaded) => {
+      if (!cancelled) roster = loaded;
+    });
+    return () => {
+      cancelled = true;
+    };
   });
 
   function debugLog(message: string, ...args: unknown[]): void {
@@ -504,9 +522,13 @@
 
   function getActiveFileTargetLabel(): string | undefined {
     const targetValue = getActiveFileTarget();
-    const target = ALL_TARGETS.find((t) => t.value === targetValue);
-
-    return target ? formatTarget(target) : undefined;
+    let result: string | undefined = undefined;
+    if (targetValue) {
+      const target = roster.targets.find((t) => t.value === targetValue);
+      // Fall back to the raw value so the chip never goes blank on an empty roster.
+      result = target ? formatTarget(target) : targetValue;
+    }
+    return result;
   }
 
   function determineFilterState(
@@ -707,14 +729,6 @@
     return getBooleanValue(entry, `note.${IS_DONE_PROPERTY}`);
   }
 
-  function getAreTargetsShown(entry: BasesEntry): boolean {
-    const areTargetsEmpty = getBooleanValue(
-      entry,
-      "formula.fnzTargetsEmptyTargets",
-    );
-    return areTargetsEmpty;
-  }
-
   function getFilterFrontmatterValues(
     filterValue: "all" | "filled" | "empty",
   ): {
@@ -824,7 +838,7 @@
         onchange={handleFilterSelect}
       >
         <option value="">All</option>
-        {#each ALL_TARGETS as target}
+        {#each roster.targets as target}
           <option value={target.value}>{formatTarget(target)}</option>
         {/each}
       </select>
@@ -971,9 +985,10 @@
             <GroupsAndTargetsSelector
               {entry}
               {app}
+              groups={roster.groups}
+              targets={roster.targets}
               propertyName="md_targets"
               label="Targets:"
-              initiallyExpanded={getAreTargetsShown(entry)}
             />
           </div>
           {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}

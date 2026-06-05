@@ -1,79 +1,65 @@
 <script lang="ts">
-  import type { App, BasesEntry, BasesPropertyId, FrontMatterCache } from "obsidian";
-  import { GroupsEnum, ALL_GROUPS, ALL_TARGETS, type DefinedTarget } from "./targetTypes";
+  import type { App, BasesEntry, FrontMatterCache } from "obsidian";
+  import type { DefinedTarget, GroupDef } from "./targetTypes";
 
   let {
     entry,
     app,
+    groups,
+    targets,
     propertyName = "md_targets",
     donePropertyName = "md_targets_done",
     label = "Targets:",
-    initiallyExpanded = false,
   }: {
     entry: BasesEntry;
     app: App;
+    groups: GroupDef[];
+    targets: DefinedTarget[];
     propertyName?: string;
     donePropertyName?: string;
     label?: string;
-    initiallyExpanded?: boolean;
   } = $props();
 
-  // Internal expansion state - can be overridden by user
-  let isExpanded = $state(false);
-  let userHasInteracted = $state(false);
+  let isOpen = $state(false);
+  let rootEl = $state<HTMLDivElement>();
 
-  // Update internal state when initiallyExpanded prop changes
+  // Close the panel when clicking outside of it. The listener is registered only
+  // while open so we don't leak one document handler per card.
   $effect(() => {
-    // Only update if user hasn't manually interacted
-    if (!userHasInteracted) {
-      isExpanded = initiallyExpanded;
-    }
+    if (!isOpen) return;
+    const onDocClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (rootEl && target && !rootEl.contains(target)) {
+        isOpen = false;
+      }
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
   });
 
-  function toggleExpansion() {
-    userHasInteracted = true;
-    isExpanded = !isExpanded;
+  function getEntryFileMetadata(): FrontMatterCache | undefined {
+    return app.metadataCache.getFileCache(entry.file) ?? undefined;
   }
 
-  function getEntryFileMetadata(entry: BasesEntry): FrontMatterCache | undefined {
-    let metadata: FrontMatterCache | undefined;
-    const entryFile = entry.file;
-    metadata = app.metadataCache.getFileCache(entryFile) ?? undefined;
-    return metadata;
-  }
-
-  function getEntryTargets(entry: BasesEntry): string[] {
-    const entryFileMetadata = getEntryFileMetadata(entry);
-    if (!entryFileMetadata) return [];
-    const result = entryFileMetadata.frontmatter?.[propertyName] ?? [];
-    return Array.isArray(result) ? result : [result];
-  }
-
-  function getEntryDoneTargets(entry: BasesEntry): string[] {
-    const entryFileMetadata = getEntryFileMetadata(entry);
-    if (!entryFileMetadata) return [];
-    const result = entryFileMetadata.frontmatter?.[donePropertyName] ?? [];
+  function readList(key: string): string[] {
+    const result = getEntryFileMetadata()?.frontmatter?.[key] ?? [];
     return Array.isArray(result) ? result : [result];
   }
 
   type TargetState = "none" | "active" | "done";
 
-  function getTargetState(entry: BasesEntry, target: DefinedTarget): TargetState {
-    const targets = getEntryTargets(entry);
-    const doneTargets = getEntryDoneTargets(entry);
-
-    if (doneTargets.includes(target.value)) {
-      return "done";
-    } else if (targets.includes(target.value)) {
-      return "active";
-    } else {
-      return "none";
+  function getTargetState(target: DefinedTarget): TargetState {
+    let result: TargetState = "none";
+    if (readList(donePropertyName).includes(target.value)) {
+      result = "done";
+    } else if (readList(propertyName).includes(target.value)) {
+      result = "active";
     }
+    return result;
   }
 
-  function getTargetValue(entry: BasesEntry, target: DefinedTarget): boolean {
-    const targets = getEntryTargets(entry);
-    return targets.includes(target.value);
+  function isChecked(target: DefinedTarget): boolean {
+    return getTargetState(target) !== "none";
   }
 
   function formatTarget(target: DefinedTarget): string {
@@ -81,305 +67,358 @@
   }
 
   function getSelectedTargetsDisplay(): string {
-    const doneTargetsList = getEntryDoneTargets(entry);
-    const activeTargets = getEntryTargets(entry)
-      .filter((entryTarget) => !doneTargetsList.includes(entryTarget)) // Only show actives not in done
-      .map((entryTarget) => {
-        const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-        return target ? formatTarget(target) : entryTarget;
-      });
-
-    const doneTargets = doneTargetsList.map((entryTarget) => {
-      const target = ALL_TARGETS.find((t) => t.value === entryTarget);
-      const formatted = target ? formatTarget(target) : entryTarget;
-      return `👁️ ${formatted}`;
-    });
-
-    return [...activeTargets, ...doneTargets].join(", ");
+    const doneList = readList(donePropertyName);
+    const active = readList(propertyName)
+      .filter((value) => !doneList.includes(value))
+      .map((value) => formatTargetValue(value));
+    const done = doneList.map((value) => `👁️ ${formatTargetValue(value)}`);
+    return [...active, ...done].join(", ");
   }
 
-  function handleTargetChange(entry: BasesEntry, target: DefinedTarget) {
-    // Mark as user-interacted to prevent auto-collapse
-    userHasInteracted = true;
-    // Auto-expand if collapsed when user modifies targets
-    if (!isExpanded) {
-      isExpanded = true;
-    }
+  function formatTargetValue(value: string): string {
+    const target = targets.find((t) => t.value === value);
+    return target ? formatTarget(target) : value;
+  }
 
-    const currentState = getTargetState(entry, target);
+  function removeValue(list: string[], value: string): void {
+    const index = list.indexOf(value);
+    if (index > -1) list.splice(index, 1);
+  }
 
+  // Left checkbox: none -> active; active/done -> cleared from both lists.
+  function toggleActive(target: DefinedTarget): void {
+    const state = getTargetState(target);
     app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      const targets = (frontmatter[propertyName] as string[]) ?? [];
-      const doneTargets = (frontmatter[donePropertyName] as string[]) ?? [];
-
-      // Cycle through states: none → active → done → none
-      if (currentState === "none") {
-        // Add to active targets
-        if (!targets.includes(target.value)) {
-          targets.push(target.value);
-        }
-      } else if (currentState === "active") {
-        // Move from active to done
-        if (!doneTargets.includes(target.value)) {
-          doneTargets.push(target.value);
-        }
-      } else if (currentState === "done") {
-        // Remove from done (back to none)
-        const indexTargets = targets.indexOf(target.value);
-        if (indexTargets > -1) {
-          targets.splice(indexTargets, 1);
-        }
-
-        const indexDoneTargets = doneTargets.indexOf(target.value);
-        if (indexDoneTargets > -1) {
-          doneTargets.splice(indexDoneTargets, 1);
-        }
-      }
-
-      console.log("targets", targets, "doneTargets", doneTargets);
-      frontmatter[propertyName] = targets;
-      frontmatter[donePropertyName] = doneTargets;
-    });
-  }
-
-  function getGroupMembers(group: GroupsEnum) {
-    return ALL_TARGETS.filter((target) => target.groups.includes(group));
-  }
-
-  function isGroupFullySelected(entry: BasesEntry, group: GroupsEnum): boolean {
-    const members = getGroupMembers(group);
-    if (members.length === 0) return false;
-    return members.every((member) => getTargetValue(entry, member));
-  }
-
-  function handleGroupClick(entry: BasesEntry, group: GroupsEnum) {
-    // Mark as user-interacted to prevent auto-collapse
-    userHasInteracted = true;
-    // Auto-expand if collapsed when user modifies targets
-    if (!isExpanded) {
-      isExpanded = true;
-    }
-
-    const members = getGroupMembers(group);
-    const isFullySelected = isGroupFullySelected(entry, group);
-
-    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
-      let targets = (frontmatter[propertyName] as string[]) ?? [];
-
-      if (isFullySelected) {
-        targets = targets.filter((t) => !members.some((m) => m.value === t));
+      const activeList = (frontmatter[propertyName] as string[]) ?? [];
+      const doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      if (state === "none") {
+        if (!activeList.includes(target.value)) activeList.push(target.value);
       } else {
-        members.forEach((member) => {
-          if (!targets.includes(member.value)) {
-            targets.push(member.value);
-          }
-        });
+        removeValue(activeList, target.value);
+        removeValue(doneList, target.value);
       }
-
-      frontmatter[propertyName] = targets;
+      frontmatter[propertyName] = activeList;
+      frontmatter[donePropertyName] = doneList;
     });
   }
 
-  function getGroupCheckboxIconClass(entry: BasesEntry, group: GroupsEnum): string {
+  // Right eye: only meaningful when checked. active -> done; done -> active.
+  function toggleDone(target: DefinedTarget): void {
+    const state = getTargetState(target);
+    if (state === "none") return;
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      const activeList = (frontmatter[propertyName] as string[]) ?? [];
+      const doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      if (state === "done") {
+        removeValue(doneList, target.value);
+      } else {
+        // Done items remain in the active list too.
+        if (!activeList.includes(target.value)) activeList.push(target.value);
+        if (!doneList.includes(target.value)) doneList.push(target.value);
+      }
+      frontmatter[propertyName] = activeList;
+      frontmatter[donePropertyName] = doneList;
+    });
+  }
+
+  function getGroupMembers(group: GroupDef): DefinedTarget[] {
+    return targets.filter((target) => target.groups.includes(group.value));
+  }
+
+  function isGroupFullySelected(group: GroupDef): boolean {
+    const members = getGroupMembers(group);
+    return members.length > 0 && members.every((member) => isChecked(member));
+  }
+
+  function isGroupPartiallySelected(group: GroupDef): boolean {
+    return getGroupMembers(group).some((member) => isChecked(member));
+  }
+
+  function getGroupCheckboxIconClass(group: GroupDef): string {
     let className = "checkbox-icon-unchecked";
-    if (isGroupFullySelected(entry, group)) {
+    if (isGroupFullySelected(group)) {
       className = "checkbox-icon-checked";
-    } else if (getGroupMembers(group).some((member) => getTargetValue(entry, member))) {
+    } else if (isGroupPartiallySelected(group)) {
       className = "checkbox-icon-partially-checked";
     }
     return className;
   }
 
-  let minimizedDisplayedTargets = $derived.by(() => {
+  // Group checkbox bulk-toggles its members. Deselecting also clears done.
+  function handleGroupClick(group: GroupDef): void {
+    const members = getGroupMembers(group);
+    const fullySelected = isGroupFullySelected(group);
+    app.fileManager.processFrontMatter(entry.file, (frontmatter) => {
+      let activeList = (frontmatter[propertyName] as string[]) ?? [];
+      let doneList = (frontmatter[donePropertyName] as string[]) ?? [];
+      if (fullySelected) {
+        const memberValues = new Set(members.map((m) => m.value));
+        activeList = activeList.filter((value) => !memberValues.has(value));
+        doneList = doneList.filter((value) => !memberValues.has(value));
+      } else {
+        members.forEach((member) => {
+          if (!activeList.includes(member.value)) activeList.push(member.value);
+        });
+      }
+      frontmatter[propertyName] = activeList;
+      frontmatter[donePropertyName] = doneList;
+    });
+  }
+
+  let summary = $derived.by(() => {
     const display = getSelectedTargetsDisplay();
     return display.trim() === "" ? "(none)" : display;
   });
 
-  const noTargets = $derived(minimizedDisplayedTargets === "(none)");
+  const noTargets = $derived(summary === "(none)");
 </script>
 
-<div class="target-container">
-  <button class="toggle-targets-btn" class:no-targets={noTargets} onclick={toggleExpansion}>
-    {isExpanded ? "▲" : " ▼"}
+<div class="target-dropdown" bind:this={rootEl}>
+  <button
+    class="dropdown-trigger"
+    class:no-targets={noTargets}
+    onclick={() => (isOpen = !isOpen)}
+    aria-expanded={isOpen}
+  >
     <b>{label}</b>
-    <span>{minimizedDisplayedTargets}</span>
+    <span class="trigger-summary">{summary}</span>
+    <span class="trigger-caret">{isOpen ? "▲" : "▼"}</span>
   </button>
-  {#if isExpanded}
-    <div class="groups-container">
-      {#each ALL_GROUPS as group}
-        <div class="groups-row">
-          <div class="targets-row">
-            <button class="btn-regular" onclick={() => handleGroupClick(entry, group.value)}>
-              <div class="checkbox-icon {getGroupCheckboxIconClass(entry, group.value)}"></div>
-              <span>{group.label}</span>
-            </button>
-            {#each getGroupMembers(group.value) as target}
-              {@const targetState = getTargetState(entry, target)}
-              <label class="checkbox-label" class:done={targetState === "done"}>
-                <button
-                  class="target-icon-btn"
-                  onclick={() => handleTargetChange(entry, target)}
-                  aria-label={targetState === "none" ? "Mark as active" : targetState === "active" ? "Mark as done" : "Remove"}
-                >
-                  {#if targetState === "none"}
-                    <span class="target-icon-empty">☐</span>
-                  {:else if targetState === "active"}
-                    <span class="target-icon-active">☑</span>
-                  {:else}
-                    <span class="target-icon-done">👁️</span>
-                  {/if}
-                </button>
-                <span>{formatTarget(target)}</span>
-              </label>
-            {/each}
-          </div>
+
+  {#if isOpen}
+    <div class="dropdown-panel">
+      {#if groups.length === 0}
+        <div class="dropdown-empty">
+          No targets configured. Set <code>md_targets_source_path</code> on the
+          list note, or create <code>Meta/Targets.md</code>.
         </div>
+      {/if}
+      {#each groups as group (group.value)}
+        {@const members = getGroupMembers(group)}
+        {#if members.length > 0}
+          <div class="group-section">
+            <button
+              class="group-header"
+              onclick={() => handleGroupClick(group)}
+            >
+              <span class="checkbox-icon {getGroupCheckboxIconClass(group)}"
+              ></span>
+              <span class="group-label">{group.label}</span>
+            </button>
+            <div class="member-list">
+              {#each members as target (target.value)}
+                {@const state = getTargetState(target)}
+                <div class="member-row" class:done={state === "done"}>
+                  <button
+                    class="member-checkbox"
+                    onclick={() => toggleActive(target)}
+                    aria-pressed={state !== "none"}
+                    aria-label={state === "none"
+                      ? "Add target"
+                      : "Remove target"}
+                  >
+                    {state === "none" ? "☐" : "☑"}
+                  </button>
+                  <span class="member-label">{formatTarget(target)}</span>
+                  <button
+                    class="member-eye"
+                    class:eye-done={state === "done"}
+                    disabled={state === "none"}
+                    onclick={() => toggleDone(target)}
+                    aria-label={state === "done"
+                      ? "Mark not done"
+                      : "Mark done"}
+                  >
+                    👁️
+                  </button>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
       {/each}
     </div>
   {/if}
 </div>
 
 <style>
-  .target-container {
-    background-color: hsl(180, 0%, 97%);
+  .target-dropdown {
+    position: relative;
+    margin-bottom: 0.5rem;
+  }
+
+  .dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-align: left;
+    transition: background-color 0.15s;
+  }
+
+  .dropdown-trigger:hover {
+    background-color: var(--background-modifier-hover);
+  }
+
+  .trigger-summary {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-normal);
+  }
+
+  .no-targets .trigger-summary {
+    color: var(--text-muted);
+  }
+
+  .trigger-caret {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+  }
+
+  .dropdown-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    margin-bottom: 0.5rem;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 0.6rem;
     border: 1px solid var(--background-modifier-border);
     border-radius: 6px;
-    padding: 0.75rem;
-    box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.05);
-  }
-
-  .toggle-targets-btn {
-    align-self: flex-start;
-    display: flex;
-    gap: 0.2rem;
-    padding: 0.3rem 0.6rem;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
     background-color: var(--background-primary);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 
-  .toggle-targets-btn:hover {
-    background-color: var(--background-modifier-hover);
-    color: var(--text-normal);
-  }
-
-  .toggle-targets-btn:active {
-    transform: scale(0.98);
-  }
-
-  .no-targets {
+  .dropdown-empty {
+    font-size: 0.8rem;
     color: var(--text-muted);
   }
 
-  .groups-container {
-    display: flex;
-    flex-direction: row;
-    gap: 1rem;
-  }
-
-  .groups-row {
-    display: flex;
-    flex-direction: row;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .targets-row {
+  .group-section {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    gap: 0.3rem;
   }
 
-  .checkbox-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .checkbox-label.done {
-    opacity: 0.7;
-  }
-
-  .target-icon-btn {
-    height: 14px;
-    width: 14px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    border: none;
-    background: none;
-    box-shadow: none;
-    border: none;
-    font-size: 1rem;
-    line-height: 1;
-    transition: transform 0.1s;
-  }
-
-  .target-icon-empty {
-    font-size: 1.8rem;
-  }
-
-  .target-icon-active {
-    font-size: 1.6rem;
-  }
-
-  .target-icon-done {
-    font-size: 1rem;
-  }
-
-  .btn-regular {
-    padding: 0.4rem 0.8rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: opacity 0.2s;
+  .group-header {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background-color: var(--background-modifier-border);
+    padding: 0.3rem 0.4rem;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--background-secondary);
     color: var(--text-normal);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  .group-header:hover {
+    background-color: var(--background-modifier-hover);
+  }
+
+  .member-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding-left: 0.4rem;
+  }
+
+  .member-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+  }
+
+  .member-row:hover {
+    background-color: var(--background-modifier-hover);
+  }
+
+  .member-row.done .member-label {
+    opacity: 0.6;
+  }
+
+  .member-checkbox {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--text-normal);
+  }
+
+  .member-label {
+    flex: 1;
+    font-size: 0.9rem;
+  }
+
+  .member-eye {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0 0.2rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    opacity: 0.25;
+    filter: grayscale(1);
+    transition: opacity 0.15s;
+  }
+
+  .member-eye.eye-done {
+    opacity: 1;
+    filter: none;
+  }
+
+  .member-eye:disabled {
+    visibility: hidden;
+    cursor: default;
   }
 
   .checkbox-icon {
-    border: 1px solid var(--background-modifier-border);
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 4px;
+    font-size: 0.9rem;
+    line-height: 1;
   }
 
   .checkbox-icon-unchecked::before {
     content: "";
-    background-color: hsla(0, 0%, 100%, 0.6);
-    border: 1px solid white;
-    width: 1rem;
-    height: 1rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 1px solid var(--background-modifier-border);
     border-radius: 100%;
+    background-color: var(--background-primary);
     display: inline-block;
   }
 
   .checkbox-icon-checked::before {
     content: "🟢";
-    color: var(--text-on-accent);
-  }
-
-  .checkbox-icon-partially-checked {
-    background-color: var(--background-modifier-border);
   }
 
   .checkbox-icon-partially-checked::before {
     content: "🟡";
-    color: var(--text-normal);
   }
 </style>
