@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an Obsidian plugin that adds an advanced list view to Obsidian Bases. It demonstrates the Obsidian Bases API (requires Obsidian 1.10.0+) that allows plugin developers to create new view types for displaying and filtering notes.
 
-The plugin renders meta-bind textarea inputs for each entry in a base, allowing inline editing of the `md-title` property for each file. This was forked from a map view plugin (see `src/map-view-original.ts.txt` for reference implementation).
+The plugin registers two custom Bases views: **Targets** (`src/targetView/`) and **Gym** (`src/gymView/`). The Targets view renders each base entry as a card with editable properties and a grouped "Targets" selector. This was forked from a map view plugin (see `src/map-view-original.ts.txt` for reference implementation).
 
 ## Build Commands
 
@@ -40,6 +40,16 @@ The plugin extends Obsidian's `Plugin` class and registers a custom bases view t
 - `getViewOptions()`: Static method returning available view configuration options
 
 The view creates a container div with class `bases-advanced-list-container` for rendering content.
+
+### Targets View (src/targetView/)
+
+`TargetsView` (a `BasesView`) mounts the `targetView.svelte` component, which renders entries as cards. Per-card target selection lives in `GroupsAndTargetsSelector.svelte`.
+
+- **Targets selector**: a grouped **multiselect dropdown**. Each member row has a left checkbox (active toggle) and a right eye icon (done toggle, only enabled when checked). Group headers bulk-select their members. The panel stays open for multiple picks and closes on click-outside.
+- **Data model** (per-card frontmatter): `md_targets` (active values; done items remain here too) and `md_targets_done` (subset marked done).
+- **Configurable roster**: groups/people are not hardcoded. `targetRoster.ts` (`TargetRoster.load`) reads them from a config note's YAML frontmatter via `vault.read` + `parseYaml`. The config note path comes from the active list note's `md_targets_source_path` frontmatter, falling back to `meta/Targets.md` (Obsidian path lookups are case-sensitive). An empty roster degrades gracefully (selector/filter show no people).
+  - Config note keys: `md_targets_groups` (list of group names, or `{value,label}`) and `md_targets_people` (list of `{value, icon, groups}`).
+- **Reactivity**: `targetView.svelte` loads the roster into reactive state on each data-update cycle (not a static `$derived` over the cache) and passes `groups`/`targets` to the selector; the top filter and active-target label also source from the roster.
 
 ### Build System
 - **Entry point**: `src/main.ts`

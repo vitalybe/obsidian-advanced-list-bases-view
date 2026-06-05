@@ -17,7 +17,8 @@
   import type { Writable } from "svelte/store";
   import GroupsAndTargetsSelector from "./GroupsAndTargetsSelector.svelte";
   import EditableTextarea from "./EditableTextarea.svelte";
-  import { ALL_TARGETS, type DefinedTarget } from "./targetTypes";
+  import { EMPTY_ROSTER, formatTarget, type Roster } from "./targetTypes";
+  import { TargetRoster } from "./targetRoster";
   import type { TargetViewStoreData } from "./targetView.ts";
 
   interface Props {
@@ -194,7 +195,19 @@
 
   // Track active target
   let activeTarget = $state<string | undefined>(undefined);
-  let activeTargetLabel = $state<string | undefined>(undefined);
+  // Groups/people roster loaded from the config note (see loader effect below).
+  let roster = $state<Roster>(EMPTY_ROSTER);
+  // Derived so it recomputes when the roster loads asynchronously (otherwise the
+  // chip would be stuck on the raw value computed during processEntries).
+  let activeTargetLabel = $derived.by(() => {
+    let result: string | undefined = undefined;
+    if (activeTarget) {
+      const target = roster.targets.find((t) => t.value === activeTarget);
+      // Fall back to the raw value so the chip never blanks on an empty roster.
+      result = target ? formatTarget(target) : activeTarget;
+    }
+    return result;
+  });
 
   // Filter state: "all", "filled", "empty"
   let targetFilter = $state<"all" | "filled" | "empty">("all");
@@ -221,6 +234,22 @@
       // Update search state from file frontmatter when active file changes
       updateSearchStateFromFile();
     }
+  });
+
+  // Loads the roster from the config note (md_targets_source_path on the active
+  // list note, else the default note). Reloaded on each data update so it
+  // settles once the active file and config note are available.
+  $effect(() => {
+    // Re-run when entries change (data-update cycle).
+    void entries;
+    const activeFile = app.workspace.activeEditor?.file ?? undefined;
+    let cancelled = false;
+    TargetRoster.load(app, activeFile).then((loaded) => {
+      if (!cancelled) roster = loaded;
+    });
+    return () => {
+      cancelled = true;
+    };
   });
 
   function debugLog(message: string, ...args: unknown[]): void {
@@ -353,10 +382,9 @@
       entries.map((entry) => processEntry(entry, properties)),
     );
 
-    // Update active target info
+    // Update active target info (activeTargetLabel derives from this + roster)
     activeTarget = getActiveFileTarget();
-    activeTargetLabel = getActiveFileTargetLabel();
-    debugLog("Updated activeTarget:", activeTarget, activeTargetLabel);
+    debugLog("Updated activeTarget:", activeTarget);
 
     // Update filter state from file frontmatter
     updateFilterStateFromFile();
@@ -481,9 +509,6 @@
     };
   }
 
-  function formatTarget(target: DefinedTarget): string {
-    return `${target.icon} ${target.value}`;
-  }
 
   function getActiveFileTarget(): string | undefined {
     let target: string | undefined;
@@ -500,13 +525,6 @@
     }
 
     return target;
-  }
-
-  function getActiveFileTargetLabel(): string | undefined {
-    const targetValue = getActiveFileTarget();
-    const target = ALL_TARGETS.find((t) => t.value === targetValue);
-
-    return target ? formatTarget(target) : undefined;
   }
 
   function determineFilterState(
@@ -707,14 +725,6 @@
     return getBooleanValue(entry, `note.${IS_DONE_PROPERTY}`);
   }
 
-  function getAreTargetsShown(entry: BasesEntry): boolean {
-    const areTargetsEmpty = getBooleanValue(
-      entry,
-      "formula.fnzTargetsEmptyTargets",
-    );
-    return areTargetsEmpty;
-  }
-
   function getFilterFrontmatterValues(
     filterValue: "all" | "filled" | "empty",
   ): {
@@ -824,7 +834,7 @@
         onchange={handleFilterSelect}
       >
         <option value="">All</option>
-        {#each ALL_TARGETS as target}
+        {#each roster.targets as target}
           <option value={target.value}>{formatTarget(target)}</option>
         {/each}
       </select>
@@ -971,9 +981,10 @@
             <GroupsAndTargetsSelector
               {entry}
               {app}
+              groups={roster.groups}
+              targets={roster.targets}
               propertyName="md_targets"
               label="Targets:"
-              initiallyExpanded={getAreTargetsShown(entry)}
             />
           </div>
           {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}
