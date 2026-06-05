@@ -57,13 +57,32 @@
     return asStringArray(getEntryFileMetadata()?.frontmatter?.[key]);
   }
 
+  // getFileCache is not a Svelte signal, so bump a counter when this entry's
+  // metadata changes (after a processFrontMatter write) to recompute the lists.
+  let metaVersion = $state(0);
+  $effect(() => {
+    const ref = app.metadataCache.on("changed", (file) => {
+      if (file.path === entry.file.path) metaVersion++;
+    });
+    return () => app.metadataCache.offref(ref);
+  });
+
+  let activeValues = $derived.by(() => {
+    void metaVersion;
+    return readList(propertyName);
+  });
+  let doneValues = $derived.by(() => {
+    void metaVersion;
+    return readList(donePropertyName);
+  });
+
   type TargetState = "none" | "active" | "done";
 
   function getTargetState(target: DefinedTarget): TargetState {
     let result: TargetState = "none";
-    if (readList(donePropertyName).includes(target.value)) {
+    if (doneValues.includes(target.value)) {
       result = "done";
-    } else if (readList(propertyName).includes(target.value)) {
+    } else if (activeValues.includes(target.value)) {
       result = "active";
     }
     return result;
@@ -78,11 +97,10 @@
   }
 
   function getSelectedTargetsDisplay(): string {
-    const doneList = readList(donePropertyName);
-    const active = readList(propertyName)
-      .filter((value) => !doneList.includes(value))
+    const active = activeValues
+      .filter((value) => !doneValues.includes(value))
       .map((value) => formatTargetValue(value));
-    const done = doneList.map((value) => `👁️ ${formatTargetValue(value)}`);
+    const done = doneValues.map((value) => `👁️ ${formatTargetValue(value)}`);
     return [...active, ...done].join(", ");
   }
 
