@@ -72,7 +72,8 @@ export class TargetRoster {
   private static parseFrontmatter(
     content: string,
   ): Record<string, unknown> | undefined {
-    const match = content.match(FRONTMATTER_RE);
+    // Strip a leading UTF-8 BOM so the frontmatter still anchors at offset 0.
+    const match = content.replace(/^\uFEFF/, "").match(FRONTMATTER_RE);
     if (!match) return undefined;
 
     let result: Record<string, unknown> | undefined;
