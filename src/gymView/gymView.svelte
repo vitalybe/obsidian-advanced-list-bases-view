@@ -94,6 +94,14 @@
     }
   });
 
+  function resetTimer() {
+    // Restart the rest timer from now (local only - does not rewrite the file).
+    const now = DateTime.now();
+    lastExerciseDate = now;
+    currentTime = now;
+    debugLog("Rest timer reset");
+  }
+
   function debugLog(message: string, ...args: unknown[]): void {
     console.log(`[GymView ListView.svelte] ${message}`, ...args);
   }
@@ -133,12 +141,20 @@
     return `${year}-${month}-${day}`;
   }
 
+  function getDataFolder(): string {
+    // Derive the session folder from existing entries so the button keeps
+    // working if the gym data folder is ever renamed/moved. Falls back to the
+    // current location when no entries are loaded yet.
+    const parentPath = entries[0]?.file?.parent?.path;
+    return parentPath && parentPath !== "/" ? parentPath : "data/gym/data";
+  }
+
   function checkTodayFileExists() {
     if (!app) return;
 
     const today = new Date();
     const filename = formatDateForFilename(today);
-    const filepath = `Gym/data/${filename}.md`;
+    const filepath = `${getDataFolder()}/${filename}.md`;
 
     const existingFile = app.vault.getAbstractFileByPath(filepath);
     todayFileExists = existingFile !== null;
@@ -148,7 +164,7 @@
   async function handleCreateNewExercise() {
     const today = new Date();
     const filename = formatDateForFilename(today);
-    const filepath = `Gym/data/${filename}.md`;
+    const filepath = `${getDataFolder()}/${filename}.md`;
 
     debugLog("Creating new exercise file:", filepath);
 
@@ -645,6 +661,13 @@
                 >
                   Submit
                 </button>
+                <button
+                  class="btn-reset-timer"
+                  onclick={resetTimer}
+                  title="Reset rest timer"
+                >
+                  ↺ Timer
+                </button>
               </div>
             </div>
             <div class="current-values">
@@ -971,6 +994,26 @@
   }
 
   .btn-submit:active {
+    transform: scale(0.98);
+  }
+
+  .btn-reset-timer {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-reset-timer:hover {
+    opacity: 0.9;
+  }
+
+  .btn-reset-timer:active {
     transform: scale(0.98);
   }
 
