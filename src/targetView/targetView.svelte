@@ -47,6 +47,11 @@
   const TARGETS_PROPERTY = "md_targets";
   const TARGETS_DONE_PROPERTY = "md_targets_done";
   const IS_DONE_PROPERTY = "md_is_done";
+  const LENGTH_MINUTES_PROPERTY = "md_length_minutes";
+  const LENGTH_FILTER_PROPERTY = "md_list_length_filter";
+  const LINK_FILTER_PROPERTY = "md_list_link_filter";
+  const LENGTH_THRESHOLD_PROPERTY = "md_list_length_threshold";
+  const DEFAULT_LENGTH_THRESHOLD = 3;
 
   // Reactive data structure for entries
   let entryData = $state<
@@ -181,14 +186,33 @@
 
   let visibleEntryData = $derived.by(() => {
     return entryData.filter((ed) => {
-      if (!ed.hasTagsProperty) return true;
-      const tags = getEntryTags(ed.entry);
-      if (onlyShowTags.length > 0) {
-        if (!tags.some((t) => onlyShowTags.includes(t))) return false;
+      if (ed.hasTagsProperty) {
+        const tags = getEntryTags(ed.entry);
+        if (onlyShowTags.length > 0) {
+          if (!tags.some((t) => onlyShowTags.includes(t))) return false;
+        }
+        if (hiddenTags.length > 0) {
+          if (tags.some((t) => hiddenTags.includes(t))) return false;
+        }
       }
-      if (hiddenTags.length > 0) {
-        if (tags.some((t) => hiddenTags.includes(t))) return false;
+
+      if (lengthFilter !== "all") {
+        const len = getEntryLengthMinutes(ed.entry);
+        if (lengthFilter === "long") {
+          // Only videos longer than the threshold; unknown length is not long.
+          if (len === null || len <= lengthThreshold) return false;
+        } else if (lengthFilter === "short") {
+          // Drop videos longer than the threshold; keep unknown-length items.
+          if (len !== null && len > lengthThreshold) return false;
+        }
       }
+
+      if (linkFilter !== "all") {
+        const hasLink = extractEntryLink(ed.entry) !== null;
+        if (linkFilter === "link" && !hasLink) return false;
+        if (linkFilter === "text" && hasLink) return false;
+      }
+
       return true;
     });
   });
@@ -211,6 +235,13 @@
 
   // Filter state: "all", "filled", "empty"
   let targetFilter = $state<"all" | "filled" | "empty">("all");
+
+  // Length filter: "all" (any), "long" (> threshold min), "short" (<= threshold
+  // min, plus items with no known length). Link filter: "all", "link" (only
+  // items that carry a link), "text" (only items without a link).
+  let lengthFilter = $state<"all" | "long" | "short">("all");
+  let linkFilter = $state<"all" | "link" | "text">("all");
+  let lengthThreshold = $state<number>(DEFAULT_LENGTH_THRESHOLD);
 
   // Search state
   let searchValue = $state<string>("");
@@ -395,6 +426,9 @@
     // Update tag state from file frontmatter
     updateTagsStateFromFile();
 
+    // Update length/link filter state from file frontmatter
+    updateExtraFiltersStateFromFile();
+
     return entryData;
   }
 
@@ -409,6 +443,17 @@
     listTags = frontmatterToStringArray(fm?.["md_list_tags"]);
     hiddenTags = frontmatterToStringArray(fm?.["md_list_tags_hidden"]);
     onlyShowTags = frontmatterToStringArray(fm?.["md_list_tags_only_show"]);
+  }
+
+  function updateExtraFiltersStateFromFile() {
+    const fm = getActiveFileMetadata()?.frontmatter;
+    const lf = fm?.[LENGTH_FILTER_PROPERTY];
+    lengthFilter = lf === "long" || lf === "short" ? lf : "all";
+    const kf = fm?.[LINK_FILTER_PROPERTY];
+    linkFilter = kf === "link" || kf === "text" ? kf : "all";
+    const th = Number(fm?.[LENGTH_THRESHOLD_PROPERTY]);
+    lengthThreshold =
+      Number.isFinite(th) && th > 0 ? th : DEFAULT_LENGTH_THRESHOLD;
   }
 
   function getEntryTags(entry: BasesEntry): string[] {
@@ -569,6 +614,26 @@
       | string
       | undefined;
     searchValue = search || "";
+  }
+
+  function getEntryLengthMinutes(entry: BasesEntry): number | null {
+    const value = entry.getValue(`note.${LENGTH_MINUTES_PROPERTY}`) as
+      | (Value & { data: unknown })
+      | null;
+    if (!value || !value.isTruthy()) return null;
+    const num = Number((value as any).data);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function extractEntryBackupLink(entry: BasesEntry): string | null {
+    for (const prop of ["note.reddit_backup_link", "note.md_backup_link"]) {
+      const value = entry.getValue(prop);
+      if (value && value.isTruthy()) {
+        const str = value.toString().trim();
+        if (str.length > 0) return str;
+      }
+    }
+    return null;
   }
 
   function extractEntryLink(entry: BasesEntry): string | null {
@@ -760,6 +825,42 @@
     targetFilter = filterValue;
   }
 
+  function handleLengthFilterChange(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value as "all" | "long" | "short";
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      if (value === "all") {
+        delete frontmatter[LENGTH_FILTER_PROPERTY];
+      } else {
+        frontmatter[LENGTH_FILTER_PROPERTY] = value;
+      }
+    });
+
+    lengthFilter = value;
+  }
+
+  function handleLinkFilterChange(event: Event) {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value as "all" | "link" | "text";
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      if (value === "all") {
+        delete frontmatter[LINK_FILTER_PROPERTY];
+      } else {
+        frontmatter[LINK_FILTER_PROPERTY] = value;
+      }
+    });
+
+    linkFilter = value;
+  }
+
   function handleSearchChange(event: Event) {
     const input = event.target as HTMLInputElement;
     const newValue = input.value;
@@ -852,6 +953,32 @@
         </select>
       </div>
 
+      <div class="target-filter-group">
+        <label for="length-filter-select" class="filter-label">Length:</label>
+        <select
+          id="length-filter-select"
+          value={lengthFilter}
+          onchange={handleLengthFilterChange}
+        >
+          <option value="all">All</option>
+          <option value="long">Longer than {lengthThreshold} min</option>
+          <option value="short">Up to {lengthThreshold} min</option>
+        </select>
+      </div>
+
+      <div class="target-filter-group">
+        <label for="link-filter-select" class="filter-label">Link:</label>
+        <select
+          id="link-filter-select"
+          value={linkFilter}
+          onchange={handleLinkFilterChange}
+        >
+          <option value="all">All</option>
+          <option value="link">With link</option>
+          <option value="text">Text only</option>
+        </select>
+      </div>
+
       {#if listTags.length > 0}
         <div class="filter-separator"></div>
         <div class="tag-cloud filter-tag-cloud">
@@ -905,6 +1032,8 @@
     {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty, imageUrl } (entry.file.path)}
       {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
       {@const entryLink = extractEntryLink(entry)}
+      {@const entryLength = getEntryLengthMinutes(entry)}
+      {@const backupLink = extractEntryBackupLink(entry)}
       <div class="card {getEntryClasses(entry)}">
         <button
           class="card-image-area"
@@ -975,6 +1104,23 @@
                   </button>
                 {/each}
               </div>
+            </div>
+          {/if}
+          {#if entryLength !== null || backupLink}
+            <div class="card-meta-row">
+              {#if entryLength !== null}
+                <span class="card-meta-badge">⏱️ {entryLength} min</span>
+              {/if}
+              {#if backupLink}
+                <a
+                  class="card-meta-link"
+                  href={backupLink}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  💾 Backup
+                </a>
+              {/if}
             </div>
           {/if}
           <div class="target-controls">
@@ -1288,6 +1434,40 @@
     flex-wrap: wrap;
     gap: 0.4rem;
     align-items: center;
+  }
+
+  .card-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    margin: 0.2rem 0;
+  }
+
+  .card-meta-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background-color: var(--background-secondary);
+    white-space: nowrap;
+  }
+
+  .card-meta-link {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--link-color, var(--interactive-accent));
+    text-decoration: none;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    background-color: var(--background-secondary);
+    white-space: nowrap;
+  }
+
+  .card-meta-link:hover {
+    text-decoration: underline;
+    background-color: var(--background-modifier-hover);
   }
 
   .link-property {
