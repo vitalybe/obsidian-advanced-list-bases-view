@@ -50,8 +50,8 @@
   const LENGTH_MINUTES_PROPERTY = "md_length_minutes";
   const LENGTH_FILTER_PROPERTY = "md_list_length_filter";
   const LINK_FILTER_PROPERTY = "md_list_link_filter";
-  const LENGTH_THRESHOLD_PROPERTY = "md_list_length_threshold";
-  const DEFAULT_LENGTH_THRESHOLD = 3;
+  const LENGTH_VALUE_PROPERTY = "md_list_length_value";
+  const DEFAULT_LENGTH_VALUE = 3;
 
   // Reactive data structure for entries
   let entryData = $state<
@@ -198,12 +198,12 @@
 
       if (lengthFilter !== "all") {
         const len = getEntryLengthMinutes(ed.entry);
-        if (lengthFilter === "long") {
-          // Only videos longer than the threshold; unknown length is not long.
-          if (len === null || len <= lengthThreshold) return false;
-        } else if (lengthFilter === "short") {
-          // Drop videos longer than the threshold; keep unknown-length items.
-          if (len !== null && len > lengthThreshold) return false;
+        if (lengthFilter === "below") {
+          // Length below the value; no known length (0 / text item) counts too.
+          if (len !== null && len >= lengthValue) return false;
+        } else if (lengthFilter === "above") {
+          // Only items with a length above the value; unknown length excluded.
+          if (len === null || len <= lengthValue) return false;
         }
       }
 
@@ -236,12 +236,13 @@
   // Filter state: "all", "filled", "empty"
   let targetFilter = $state<"all" | "filled" | "empty">("all");
 
-  // Length filter: "all" (any), "long" (> threshold min), "short" (<= threshold
-  // min, plus items with no known length). Link filter: "all", "link" (only
-  // items that carry a link), "text" (only items without a link).
-  let lengthFilter = $state<"all" | "long" | "short">("all");
+  // Length filter: "all" (any), "below" (length < value, which also covers
+  // items with 0 / no known length), "above" (length > value; items without a
+  // length never match). Link filter: "all", "link" (only items that carry a
+  // link), "text" (only items without a link).
+  let lengthFilter = $state<"all" | "below" | "above">("all");
   let linkFilter = $state<"all" | "link" | "text">("all");
-  let lengthThreshold = $state<number>(DEFAULT_LENGTH_THRESHOLD);
+  let lengthValue = $state<number>(DEFAULT_LENGTH_VALUE);
 
   // Search state
   let searchValue = $state<string>("");
@@ -448,12 +449,12 @@
   function updateExtraFiltersStateFromFile() {
     const fm = getActiveFileMetadata()?.frontmatter;
     const lf = fm?.[LENGTH_FILTER_PROPERTY];
-    lengthFilter = lf === "long" || lf === "short" ? lf : "all";
+    lengthFilter = lf === "below" || lf === "above" ? lf : "all";
     const kf = fm?.[LINK_FILTER_PROPERTY];
     linkFilter = kf === "link" || kf === "text" ? kf : "all";
-    const th = Number(fm?.[LENGTH_THRESHOLD_PROPERTY]);
-    lengthThreshold =
-      Number.isFinite(th) && th > 0 ? th : DEFAULT_LENGTH_THRESHOLD;
+    const val = Number(fm?.[LENGTH_VALUE_PROPERTY]);
+    lengthValue =
+      Number.isFinite(val) && val >= 0 ? val : DEFAULT_LENGTH_VALUE;
   }
 
   function getEntryTags(entry: BasesEntry): string[] {
@@ -827,7 +828,7 @@
 
   function handleLengthFilterChange(event: Event) {
     const select = event.target as HTMLSelectElement;
-    const value = select.value as "all" | "long" | "short";
+    const value = select.value as "all" | "below" | "above";
 
     const activeFile = app.workspace.activeEditor?.file;
     if (!activeFile) return;
@@ -841,6 +842,22 @@
     });
 
     lengthFilter = value;
+  }
+
+  function handleLengthValueChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const parsed = Number(input.value);
+    const value =
+      Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_LENGTH_VALUE;
+
+    const activeFile = app.workspace.activeEditor?.file;
+    if (!activeFile) return;
+
+    app.fileManager.processFrontMatter(activeFile, (frontmatter) => {
+      frontmatter[LENGTH_VALUE_PROPERTY] = value;
+    });
+
+    lengthValue = value;
   }
 
   function handleLinkFilterChange(event: Event) {
@@ -961,9 +978,22 @@
           onchange={handleLengthFilterChange}
         >
           <option value="all">All</option>
-          <option value="long">Longer than {lengthThreshold} min</option>
-          <option value="short">Up to {lengthThreshold} min</option>
+          <option value="below">Below</option>
+          <option value="above">Above</option>
         </select>
+        {#if lengthFilter !== "all"}
+          <input
+            id="length-value-input"
+            class="length-value-input"
+            type="number"
+            min="0"
+            step="1"
+            value={lengthValue}
+            onchange={handleLengthValueChange}
+            aria-label="Length in minutes"
+          />
+          <span class="filter-unit">min</span>
+        {/if}
       </div>
 
       <div class="target-filter-group">
@@ -1261,6 +1291,27 @@
   .filter-label {
     font-weight: 500;
     color: var(--text-normal);
+    white-space: nowrap;
+  }
+
+  .length-value-input {
+    width: 4rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 0.85rem;
+  }
+
+  .length-value-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+  }
+
+  .filter-unit {
+    font-weight: 500;
+    color: var(--text-muted);
     white-space: nowrap;
   }
 
