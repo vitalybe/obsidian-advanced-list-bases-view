@@ -138,6 +138,47 @@ body {
   min-width: 0;
 }
 
+/* Long-press must not start a text selection or trigger the mobile
+   text-selection callout, and taps should register immediately (no
+   300ms delay) instead of waiting to see if a second tap follows. */
+.alb-tag-cloud .alb-tag-pill {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.alb-tag-cloud .alb-tag-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Untagged is a sentinel, not a real tag - dashed border + italic keep it
+   visually distinct from the vocabulary pills around it. */
+.alb-tagcloud-untagged {
+  border-style: dashed;
+  font-style: italic;
+}
+
+.alb-tagcloud-more-chip {
+  border-style: dashed;
+  color: var(--text-muted);
+  background-color: transparent;
+}
+
+.alb-tagcloud-more-chip:hover {
+  color: var(--text-normal);
+}
+
+.alb-tagcloud-clear-chip {
+  color: var(--text-error);
+  border-color: var(--text-error);
+  background-color: transparent;
+}
+
+.alb-tagcloud-clear-chip:hover {
+  background-color: var(--background-modifier-error-hover, var(--background-modifier-hover));
+}
+
 /* =========================================================================
    ENTRY TAGS (owned by Wave 1 agent B)
    ========================================================================= */
