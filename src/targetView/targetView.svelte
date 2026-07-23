@@ -30,6 +30,7 @@
     readListTagState,
     resolveListFile,
   } from "./tags/tagModel";
+  import { TAGS_PROPERTY } from "./tags/tagTypes";
   import { clearTagFilters as clearTagFiltersWrite } from "./tags/tagWrites";
 
   interface Props {
@@ -196,9 +197,18 @@
     return map;
   });
   let entryTagLists = $derived([...entryTagsByPath.values()]);
+  // True when md_tags is in the view's configured property order, regardless
+  // of whether any note currently has a value for it. This is the signal that
+  // lets a user bootstrap: entryData's per-entry hasTagsProperty is false for
+  // a note with no md_tags at all, so gating solely on it would hide the "+"
+  // button on a list where nothing is tagged yet - leaving no way to add a
+  // first tag from the UI.
+  let tagsPropertyConfigured = $derived(
+    properties.some((p) => parsePropertyId(p).propertyName === TAGS_PROPERTY),
+  );
   let tagsEnabled = $derived(
-    listTags.length > 0 ||
-      entryData.some((ed) => ed.hasTagsProperty) ||
+    tagsPropertyConfigured ||
+      listTags.length > 0 ||
       entryTagLists.some((t) => t.length > 0),
   );
 
@@ -207,8 +217,9 @@
   // activeEditor, which is not itself reactive. The effect body below reads
   // nothing reactive - listFile/entryPaths are read inside the event
   // callbacks, which run outside the effect's tracking context - so this
-  // registers exactly once per mount (verified with console.count() during
-  // manual testing; see the session report).
+  // should register exactly once per mount. NOT yet confirmed against a
+  // running Obsidian; if it turns out to re-register on every data update,
+  // wrap the callback reads in untrack().
   $effect(() => {
     const metaRef = app.metadataCache.on("changed", (file) => {
       if (file.path === listFile?.path || entryPaths.has(file.path)) {
