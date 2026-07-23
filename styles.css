@@ -191,10 +191,82 @@ body {
   padding: 0.25rem 0;
 }
 
+/* The pill body is no longer a remove button (a stray click used to
+   silently and irreversibly edit frontmatter with no undo) - only the
+   nested × below removes. Keep the pill non-interactive-looking. */
+.alb-entrytags-pill {
+  position: relative;
+  cursor: default;
+  /* Reserve the ×'s footprint permanently so hovering/focusing only
+     animates its opacity - display:none/width:0 here would reflow the
+     whole wrapped tag row as the cursor crosses it. */
+  padding-right: 1.35rem;
+}
+
+.alb-entrytags-remove {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.alb-entrytags-pill:hover .alb-entrytags-remove,
+.alb-entrytags-remove:focus-visible {
+  opacity: 1;
+}
+
+.alb-entrytags-remove:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+@media (hover: none) {
+  .alb-entrytags-remove {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  /* Grow the tap target well past 32px without affecting the pill's own
+     box (this button is position:absolute, so it can't reflow the row). */
+  .alb-entrytags-remove {
+    width: 32px;
+    height: 32px;
+    right: -4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alb-entrytags-remove {
+    transition: none;
+  }
+}
+
 .alb-entrytags-add {
   font-weight: 600;
   padding: 0.2rem 0.5rem;
   color: var(--text-muted);
+  background-color: transparent;
+  border-style: dashed;
+}
+
+.alb-entrytags-add:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
 }
 
 /* =========================================================================
@@ -203,19 +275,28 @@ body {
 
 .alb-tagpicker-panel {
   /* Portaled to <body>; top/left set inline, anchored to the trigger - see
-     TagPicker.svelte / GroupsAndTargetsSelector.svelte for the pattern. */
+     TagPicker.svelte / GroupsAndTargetsSelector.svelte for the pattern.
+     Deliberately no inline `width` - unlike the targets dropdown this
+     panel's trigger is a ~26px "+" pill, so width comes from min-width
+     below instead of copying the trigger's rect. */
   position: fixed;
   z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  min-width: 200px;
+  min-width: 220px;
   max-height: 320px;
   padding: 0.5rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   background-color: var(--background-primary);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+@media (pointer: coarse) {
+  .alb-tagpicker-panel {
+    max-height: min(280px, 40vh);
+  }
 }
 
 .alb-tagpicker-input {
@@ -232,6 +313,13 @@ body {
   border-color: var(--interactive-accent);
 }
 
+@media (pointer: coarse) {
+  /* >=16px or iOS zooms the page on focus. */
+  .alb-tagpicker-input {
+    font-size: 16px;
+  }
+}
+
 .alb-tagpicker-list {
   display: flex;
   flex-direction: column;
@@ -240,6 +328,9 @@ body {
 }
 
 .alb-tagpicker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.3rem 0.5rem;
   border: none;
   border-radius: 4px;
@@ -250,12 +341,55 @@ body {
   text-align: left;
 }
 
-.alb-tagpicker-option:hover {
+.alb-tagpicker-option:hover,
+.alb-tagpicker-option--active {
   background-color: var(--background-modifier-hover);
+}
+
+@media (pointer: coarse) {
+  .alb-tagpicker-option {
+    min-height: 44px;
+  }
+}
+
+.alb-tagpicker-option__check {
+  width: 1rem;
+  flex: none;
+  color: var(--interactive-accent);
+}
+
+/* Applied tags stay in the list (rather than being hidden) so the panel
+   doesn't jump under the cursor as you pick, and so keyboard users have a
+   removal path that doesn't require hunting a hover-only ×. */
+.alb-tagpicker-option--applied {
+  color: var(--text-muted);
+}
+
+.alb-tagpicker-separator {
+  margin: 0.2rem 0;
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .alb-tagpicker-create {
   color: var(--interactive-accent);
+  flex-wrap: wrap;
+}
+
+.alb-tagpicker-create__icon {
+  font-weight: 700;
+}
+
+.alb-tagpicker-create--invalid {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.alb-tagpicker-create__hint {
+  display: block;
+  width: 100%;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: 1.35rem;
 }
 
 .alb-tagpicker-empty {
