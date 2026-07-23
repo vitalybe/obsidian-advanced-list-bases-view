@@ -84,13 +84,13 @@
       return;
     }
     const next: TagState = item.state === "include" ? "neutral" : "include";
-    setTagState(app, listFile, item.name, next);
+    setTagState(app, listFile, item.name, next).catch((e) => console.error("[TagCloud]", e));
     announceState(item, next);
   }
 
   function applyMenuState(item: TagCloudItem, next: TagState): void {
     if (!listFile) return;
-    setTagState(app, listFile, item.name, next);
+    setTagState(app, listFile, item.name, next).catch((e) => console.error("[TagCloud]", e));
     announceState(item, next);
   }
 
@@ -139,7 +139,7 @@
 
   function handleClear(): void {
     if (!listFile) return;
-    clearTagFilters(app, listFile);
+    clearTagFilters(app, listFile).catch((e) => console.error("[TagCloud]", e));
     onannounce("Tag filters cleared");
   }
 

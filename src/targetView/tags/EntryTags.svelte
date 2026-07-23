@@ -1,16 +1,15 @@
 <script lang="ts">
-  import { Notice, type TFile } from "obsidian";
+  import { Notice } from "obsidian";
   import TagPicker from "./TagPicker.svelte";
-  import { TAGS_PROPERTY, LIST_TAGS_PROPERTY } from "./tagTypes";
   import {
     findExistingTag,
     hasTag,
     isValidTagName,
     normalizeTagInput,
-    normalizeTagList,
     sameTag,
     tagKey,
   } from "./tagModel";
+  import { addEntryTag, addToVocabulary, removeEntryTag } from "./tagWrites";
   import type { EntryTagsProps } from "./tagComponentProps";
 
   // Tags arrive as a prop, derived upstream from the metadata cache. Do NOT
@@ -40,50 +39,12 @@
   // A stay-open panel lets a user fire several writes to this file within
   // one gesture (pick, pick, create). `processFrontMatter` is async, and
   // concurrent calls on the same file can clobber each other, so every
-  // write below funnels through this single promise chain.
-  //
-  // tagWrites.ts's addEntryTag/removeEntryTag/addToVocabulary are typed
-  // `: void` and never `return` the processFrontMatter call, so there is no
-  // promise to chain on if they're called directly - awaiting their result
-  // resolves immediately regardless of whether the actual write finished,
-  // which would defeat serialization entirely. The three helpers below
-  // reimplement the exact same read-modify-write logic (same tagModel
-  // helpers, same TAGS_PROPERTY/LIST_TAGS_PROPERTY keys) but return the
-  // real completion promise so `enqueue` can serialize on it.
+  // write below funnels through this single promise chain, chained on the
+  // real completion promise returned by tagWrites.ts's writers.
   // -------------------------------------------------------------------
   let writeQueue: Promise<void> = Promise.resolve();
   function enqueue(op: () => Promise<void>): void {
     writeQueue = writeQueue.then(op).catch((e) => console.error("[EntryTags]", e));
-  }
-
-  function writeAddEntryTag(tag: string): Promise<void> {
-    const normalized = normalizeTagInput(tag);
-    if (normalized === null || !isValidTagName(normalized)) return Promise.resolve();
-    return app.fileManager.processFrontMatter(entry.file, (fm) => {
-      const current = normalizeTagList(fm[TAGS_PROPERTY]);
-      if (hasTag(current, normalized)) return;
-      current.push(normalized);
-      fm[TAGS_PROPERTY] = current;
-    });
-  }
-
-  function writeRemoveEntryTag(tag: string): Promise<void> {
-    return app.fileManager.processFrontMatter(entry.file, (fm) => {
-      const current = normalizeTagList(fm[TAGS_PROPERTY]);
-      if (!hasTag(current, tag)) return;
-      fm[TAGS_PROPERTY] = current.filter((t) => !sameTag(t, tag));
-    });
-  }
-
-  function writeAddToVocabulary(target: TFile, tag: string): Promise<void> {
-    const normalized = normalizeTagInput(tag);
-    if (normalized === null || !isValidTagName(normalized)) return Promise.resolve();
-    return app.fileManager.processFrontMatter(target, (fm) => {
-      const current = normalizeTagList(fm[LIST_TAGS_PROPERTY]);
-      if (hasTag(current, normalized)) return;
-      current.push(normalized);
-      fm[LIST_TAGS_PROPERTY] = current;
-    });
   }
 
   // Vocabulary the parent hasn't caught up to yet (a Create just landed).
@@ -116,7 +77,7 @@
     if (btn && document.activeElement === btn) {
       addButtonEl?.focus();
     }
-    enqueue(() => writeRemoveEntryTag(tag));
+    enqueue(() => removeEntryTag(app, entry.file, tag));
     onannounce(`Removed ${tag} from ${entry.file.basename}`);
   }
 
@@ -125,10 +86,10 @@
   // through the same queue as the pill's own remove button.
   function handleToggle(tag: string, applied: boolean): void {
     if (applied) {
-      enqueue(() => writeRemoveEntryTag(tag));
+      enqueue(() => removeEntryTag(app, entry.file, tag));
       onannounce(`Removed ${tag} from ${entry.file.basename}`);
     } else {
-      enqueue(() => writeAddEntryTag(tag));
+      enqueue(() => addEntryTag(app, entry.file, tag));
       onannounce(`Added ${tag} to ${entry.file.basename}`);
     }
   }
@@ -153,11 +114,11 @@
       pendingVocabAdds = [...pendingVocabAdds, normalized];
       // Vocabulary first, then the entry tag - so a re-render mid-flight
       // never shows the new tag as a (vocabulary-less) orphan.
-      enqueue(() => writeAddToVocabulary(listFile, normalized));
-      enqueue(() => writeAddEntryTag(normalized));
+      enqueue(() => addToVocabulary(app, listFile, normalized));
+      enqueue(() => addEntryTag(app, entry.file, normalized));
       onannounce(`Created ${normalized} and added it to ${entry.file.basename}`);
     } else {
-      enqueue(() => writeAddEntryTag(normalized));
+      enqueue(() => addEntryTag(app, entry.file, normalized));
       onannounce(`Added ${normalized} to ${entry.file.basename}`);
       new Notice(
         `Added "${normalized}" to ${entry.file.basename}, but couldn't add it to the list's tag vocabulary - no active list note.`,
