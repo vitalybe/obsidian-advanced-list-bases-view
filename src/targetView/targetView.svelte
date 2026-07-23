@@ -954,7 +954,9 @@
 
   function handleClearTagFilters(): void {
     if (!listFile) return;
-    clearTagFiltersWrite(app, listFile);
+    clearTagFiltersWrite(app, listFile).catch((e) =>
+      console.error("[targetView] clearTagFilters", e),
+    );
     announce("Tag filters cleared");
   }
 
