@@ -2,13 +2,11 @@
   import { untrack } from "svelte";
   import { findExistingTag, hasTag, isValidTagName, tagKey } from "./tagModel";
 
-  // Local prop shape - deliberately NOT the frozen TagPickerProps from
-  // tagComponentProps.ts. That file documents the original "TagPicker writes
-  // for itself" design; this component instead reports picks/creates up to
-  // EntryTags via callbacks so every write can be funneled through EntryTags'
-  // single write-serialization queue (see EntryTags.svelte). Since only
-  // EntryTags.svelte imports this component, and both files are ours, the
-  // contract only needs to be consistent between the two.
+  // Prop shape is declared inline rather than in tagComponentProps.ts: this
+  // component performs no writes, reporting picks and creates up to EntryTags
+  // via callbacks so every write funnels through that component's single
+  // write-serialization queue (see EntryTags.svelte). EntryTags is the only
+  // importer, so the contract only needs to hold between the two files.
   let {
     id,
     vocabulary,
