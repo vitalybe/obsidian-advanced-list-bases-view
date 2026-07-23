@@ -21,3 +21,204 @@ body {
   font-weight: bold;
   color: var(--text-muted);
 }
+
+/* =========================================================================
+   TAGS: SHARED (frozen)
+   Naming constraint: these rules are GLOBAL and compete with Obsidian core
+   and themes, which style `.tag` aggressively. Never use bare `.tag`,
+   `.tag-button`, `.tag-cloud` - everything here is prefixed `alb-tag-` /
+   `alb-tagcloud-` / `alb-entrytags-` / `alb-tagpicker-`.
+   ========================================================================= */
+
+.alb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Duplicates .property / .property-label from targetView.svelte on purpose:
+   EntryTags now owns its whole row including the label, so it can't share
+   targetView's scoped <style> block. Keep these two pairs in sync if the
+   base property row styling changes. */
+.alb-tag-section {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.1rem;
+  gap: 0.1rem;
+}
+
+.alb-tag-section__label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.alb-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.alb-tag-pill:hover {
+  border-color: var(--interactive-accent);
+}
+
+.alb-tag-pill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+.alb-tag-pill__icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.alb-tag-pill__count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.alb-tag-pill--zero {
+  opacity: 0.45;
+}
+
+/* States must be distinguishable without color: include gets a check glyph,
+   exclude gets a strike glyph plus strikethrough text. Colors are theme
+   variables, not hardcoded hex, so they follow the user's theme/contrast. */
+.alb-tag-pill--exclude {
+  text-decoration: line-through;
+  opacity: 0.55;
+  border-color: var(--text-error);
+  color: var(--text-error);
+}
+
+.alb-tag-pill--include {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.alb-tag-pill--selected {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+@media (pointer: coarse) {
+  .alb-tag-pill {
+    min-height: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alb-tag-pill {
+    transition: none;
+  }
+}
+
+/* =========================================================================
+   TAG CLOUD (owned by Wave 1 agent A)
+   ========================================================================= */
+
+.alb-tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* =========================================================================
+   ENTRY TAGS (owned by Wave 1 agent B)
+   ========================================================================= */
+
+.alb-entrytags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+
+.alb-entrytags-add {
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  color: var(--text-muted);
+}
+
+/* =========================================================================
+   TAG PICKER (owned by Wave 1 agent B)
+   ========================================================================= */
+
+.alb-tagpicker-panel {
+  /* Portaled to <body>; top/left set inline, anchored to the trigger - see
+     TagPicker.svelte / GroupsAndTargetsSelector.svelte for the pattern. */
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 200px;
+  max-height: 320px;
+  padding: 0.5rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.alb-tagpicker-input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 0.85rem;
+}
+
+.alb-tagpicker-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.alb-tagpicker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow-y: auto;
+}
+
+.alb-tagpicker-option {
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.alb-tagpicker-option:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.alb-tagpicker-create {
+  color: var(--interactive-accent);
+}
+
+.alb-tagpicker-empty {
+  padding: 0.3rem 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}

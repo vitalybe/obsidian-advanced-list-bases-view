@@ -20,6 +20,17 @@
   import { EMPTY_ROSTER, formatTarget, type Roster } from "./targetTypes";
   import { TargetRoster } from "./targetRoster";
   import type { TargetViewStoreData } from "./targetView.ts";
+  import TagCloud from "./tags/TagCloud.svelte";
+  import EntryTags from "./tags/EntryTags.svelte";
+  import {
+    countActiveTagFilters,
+    describeTagFilters,
+    matchesTagFilters,
+    readEntryTags,
+    readListTagState,
+    resolveListFile,
+  } from "./tags/tagModel";
+  import { clearTagFilters as clearTagFiltersWrite } from "./tags/tagWrites";
 
   interface Props {
     targetViewStore: Writable<TargetViewStoreData>;
@@ -152,49 +163,75 @@
     return findImageInText(fileContent, sourcePath);
   }
 
-  // Tag state
-  let listTags = $state<string[]>([]);
-  let hiddenTags = $state<string[]>([]);
-  let onlyShowTags = $state<string[]>([]);
-
-  let tagCounts = $derived.by(() => {
-    const counts = new Map<string, number>();
-    for (const tag of listTags) counts.set(tag, 0);
-    for (const ed of entryData) {
-      for (const t of getEntryTags(ed.entry)) {
-        counts.set(t, (counts.get(t) ?? 0) + 1);
-      }
-    }
-    return counts;
+  // Tag state, derived from the metadata cache rather than written +
+  // mirrored into local $state like the other filters below. Today's
+  // cycleTagState (now deleted) wrote frontmatter and waited for Bases to
+  // re-run the query; if the base's own filter didn't reference the tag
+  // keys, that refresh could simply never fire. Deriving straight from the
+  // cache means any write - from this view, the note's frontmatter editor,
+  // another device via sync - shows up immediately. See the metaVersion
+  // effect below for how the cache-change signal gets in.
+  let metaVersion = $state(0);
+  let entryPaths = $derived(
+    new Set(entryData.map((ed) => ed.entry.file.path)),
+  );
+  let listFile = $derived.by(() => {
+    void metaVersion;
+    return resolveListFile(app);
   });
+  let listTagState = $derived.by(() => {
+    void metaVersion;
+    void entries;
+    return readListTagState(app, listFile);
+  });
+  let listTags = $derived(listTagState.vocabulary);
+  let tagFilters = $derived(listTagState.filters);
+  let activeTagFilterCount = $derived(countActiveTagFilters(tagFilters));
+  let entryTagsByPath = $derived.by(() => {
+    void metaVersion;
+    const map = new Map<string, string[]>();
+    for (const ed of entryData) {
+      map.set(ed.entry.file.path, readEntryTags(app, ed.entry.file));
+    }
+    return map;
+  });
+  let entryTagLists = $derived([...entryTagsByPath.values()]);
+  let tagsEnabled = $derived(
+    listTags.length > 0 ||
+      entryData.some((ed) => ed.hasTagsProperty) ||
+      entryTagLists.some((t) => t.length > 0),
+  );
 
-  let tagCloud = $derived.by(() => {
-    const names = new Set<string>([...listTags, ...tagCounts.keys()]);
-    return [...names]
-      .sort(
-        (a, b) =>
-          (tagCounts.get(b) ?? 0) - (tagCounts.get(a) ?? 0) ||
-          a.localeCompare(b),
-      )
-      .map((name) => ({
-        name,
-        count: tagCounts.get(name) ?? 0,
-        hidden: hiddenTags.includes(name),
-        onlyShow: onlyShowTags.includes(name),
-      }));
+  // Bumps metaVersion on relevant metadata-cache changes. Also listens to
+  // file-open/active-leaf-change because resolveListFile reads
+  // activeEditor, which is not itself reactive. The effect body below reads
+  // nothing reactive - listFile/entryPaths are read inside the event
+  // callbacks, which run outside the effect's tracking context - so this
+  // registers exactly once per mount (verified with console.count() during
+  // manual testing; see the session report).
+  $effect(() => {
+    const metaRef = app.metadataCache.on("changed", (file) => {
+      if (file.path === listFile?.path || entryPaths.has(file.path)) {
+        metaVersion++;
+      }
+    });
+    const openRef = app.workspace.on("file-open", () => {
+      metaVersion++;
+    });
+    const leafRef = app.workspace.on("active-leaf-change", () => {
+      metaVersion++;
+    });
+    return () => {
+      app.metadataCache.offref(metaRef);
+      app.workspace.offref(openRef);
+      app.workspace.offref(leafRef);
+    };
   });
 
   let visibleEntryData = $derived.by(() => {
     return entryData.filter((ed) => {
-      if (ed.hasTagsProperty) {
-        const tags = getEntryTags(ed.entry);
-        if (onlyShowTags.length > 0) {
-          if (!tags.some((t) => onlyShowTags.includes(t))) return false;
-        }
-        if (hiddenTags.length > 0) {
-          if (tags.some((t) => hiddenTags.includes(t))) return false;
-        }
-      }
+      const tags = entryTagsByPath.get(ed.entry.file.path) ?? [];
+      if (!matchesTagFilters(tags, tagFilters)) return false;
 
       if (lengthFilter !== "all") {
         const len = getEntryLengthMinutes(ed.entry);
@@ -424,26 +461,10 @@
     // Update search value from file frontmatter
     updateSearchStateFromFile();
 
-    // Update tag state from file frontmatter
-    updateTagsStateFromFile();
-
     // Update length/link filter state from file frontmatter
     updateExtraFiltersStateFromFile();
 
     return entryData;
-  }
-
-  function frontmatterToStringArray(raw: unknown): string[] {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.filter((x) => x != null).map(String);
-    return [String(raw)];
-  }
-
-  function updateTagsStateFromFile() {
-    const fm = getActiveFileMetadata()?.frontmatter;
-    listTags = frontmatterToStringArray(fm?.["md_list_tags"]);
-    hiddenTags = frontmatterToStringArray(fm?.["md_list_tags_hidden"]);
-    onlyShowTags = frontmatterToStringArray(fm?.["md_list_tags_only_show"]);
   }
 
   function updateExtraFiltersStateFromFile() {
@@ -455,46 +476,6 @@
     const val = Number(fm?.[LENGTH_VALUE_PROPERTY]);
     lengthValue =
       Number.isFinite(val) && val >= 0 ? val : DEFAULT_LENGTH_VALUE;
-  }
-
-  function getEntryTags(entry: BasesEntry): string[] {
-    const value: { data: unknown } | null = entry.getValue(
-      "note.md_tags",
-    ) as any;
-    if (!value) return [];
-    return frontmatterToStringArray(value.data);
-  }
-
-  function cycleTagState(tag: string) {
-    const file = app.workspace.activeEditor?.file;
-    if (!file) return;
-    const wasOnly = onlyShowTags.includes(tag);
-    const wasHidden = hiddenTags.includes(tag);
-    app.fileManager.processFrontMatter(file, (fm) => {
-      const onlyArr = frontmatterToStringArray(fm["md_list_tags_only_show"]);
-      const hiddenArr = frontmatterToStringArray(fm["md_list_tags_hidden"]);
-      const oIdx = onlyArr.indexOf(tag);
-      if (oIdx >= 0) onlyArr.splice(oIdx, 1);
-      const hIdx = hiddenArr.indexOf(tag);
-      if (hIdx >= 0) hiddenArr.splice(hIdx, 1);
-      if (!wasOnly && !wasHidden) {
-        onlyArr.push(tag);
-      } else if (wasOnly) {
-        hiddenArr.push(tag);
-      }
-      fm["md_list_tags_only_show"] = onlyArr;
-      fm["md_list_tags_hidden"] = hiddenArr;
-    });
-  }
-
-  function toggleEntryTag(entry: BasesEntry, tag: string) {
-    app.fileManager.processFrontMatter(entry.file, (fm) => {
-      const arr = frontmatterToStringArray(fm["md_tags"]);
-      const idx = arr.indexOf(tag);
-      if (idx >= 0) arr.splice(idx, 1);
-      else arr.push(tag);
-      fm["md_tags"] = arr;
-    });
   }
 
   async function processProperty(
@@ -939,10 +920,57 @@
     const mdListType = metadata.frontmatter["md_list_type"];
     return !!mdListType;
   }
+
+  // Single screen-reader live region for the whole view. Tag components
+  // report through their onannounce prop rather than creating their own
+  // region - multiple polite regions interleave unpredictably.
+  let announceMessage = $state("");
+  let announceTimer: number | undefined;
+  function announce(msg: string): void {
+    if (announceTimer !== undefined) window.clearTimeout(announceTimer);
+    announceTimer = window.setTimeout(() => {
+      announceMessage = msg;
+    }, 250);
+  }
+
+  $effect(() => {
+    const shown = visibleEntryData.length;
+    const total = entryData.length;
+    const tagPart =
+      activeTagFilterCount > 0 ? `, ${describeTagFilters(tagFilters)}` : "";
+    announce(`${shown} of ${total} notes shown${tagPart}`);
+  });
+
+  function handleClearTagFilters(): void {
+    if (!listFile) return;
+    clearTagFiltersWrite(app, listFile);
+    announce("Tag filters cleared");
+  }
+
+  // Summarizes ALL active filters (tag, length, link, target, search), since
+  // any of them can be the reason the result set is empty - not just tags.
+  let activeFilterSummary = $derived.by(() => {
+    const parts: string[] = [];
+    if (activeTagFilterCount > 0) parts.push(describeTagFilters(tagFilters));
+    if (lengthFilter !== "all") {
+      parts.push(`length ${lengthFilter} ${lengthValue} min`);
+    }
+    if (linkFilter !== "all") {
+      parts.push(linkFilter === "link" ? "with link" : "text only");
+    }
+    if (targetFilter !== "all") {
+      parts.push(`targets: ${targetFilter}`);
+    }
+    if (searchValue.trim()) {
+      parts.push(`search "${searchValue.trim()}"`);
+    }
+    return parts.join(", ");
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="list-container" tabindex="0" role="region" aria-label="List view">
+  <div class="alb-sr-only" role="status" aria-live="polite">{announceMessage}</div>
   {#if isOmniList()}
     <div class="filters-container">
       <label for="active-target-select">Select your target:</label>
@@ -1009,20 +1037,17 @@
         </select>
       </div>
 
-      {#if listTags.length > 0}
+      {#if tagsEnabled}
         <div class="filter-separator"></div>
-        <div class="tag-cloud filter-tag-cloud">
-          {#each tagCloud as t (t.name)}
-            <button
-              class="tag-button"
-              class:tag-hidden={t.hidden}
-              class:tag-only-show={t.onlyShow}
-              class:tag-zero={t.count === 0}
-              onclick={() => cycleTagState(t.name)}
-            >
-              {t.name}<span class="tag-count">{t.count}</span>
-            </button>
-          {/each}
+        <div class="filter-tag-slot">
+          <TagCloud
+            {app}
+            {listFile}
+            vocabulary={listTags}
+            {entryTagLists}
+            filters={tagFilters}
+            onannounce={announce}
+          />
         </div>
         <div class="filter-separator"></div>
       {/if}
@@ -1059,8 +1084,8 @@
   {/if}
 
   <div class="cards-grid">
-    {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, hasTagsProperty, imageUrl } (entry.file.path)}
-      {@const entryTags = hasTagsProperty ? getEntryTags(entry) : []}
+    {#each visibleEntryData as { entry, filledProperties, emptyProperties, fileContent, imageUrl } (entry.file.path)}
+      {@const entryTags = entryTagsByPath.get(entry.file.path) ?? []}
       {@const entryLink = extractEntryLink(entry)}
       {@const entryLength = getEntryLengthMinutes(entry)}
       {@const backupLink = extractEntryBackupLink(entry)}
@@ -1119,22 +1144,15 @@
               {/each}
             </div>
           {/if}
-          {#if hasTagsProperty && entryTags.length > 0}
-            <div class="property">
-              <label class="property-label" for={`${entry.file.path}-md_tags`}
-                >Tags</label
-              >
-              <div class="tag-cloud entry-tag-cloud">
-                {#each entryTags as tagName (tagName)}
-                  <button
-                    class="tag-button tag-selected"
-                    onclick={() => toggleEntryTag(entry, tagName)}
-                  >
-                    {tagName}
-                  </button>
-                {/each}
-              </div>
-            </div>
+          {#if tagsEnabled}
+            <EntryTags
+              {app}
+              {entry}
+              {listFile}
+              tags={entryTags}
+              vocabulary={listTags}
+              onannounce={announce}
+            />
           {/if}
           {#if entryLength !== null || backupLink}
             <div class="card-meta-row">
@@ -1163,14 +1181,11 @@
               label="Targets:"
             />
           </div>
-          {#if emptyProperties.length > 0 || (hasTagsProperty && entryTags.length === 0)}
+          {#if emptyProperties.length > 0}
             <div class="empty-properties-container">
               {#each emptyProperties as propData (propData.propertyFull)}
                 <span class="empty-property-label">{propData.label}</span>
               {/each}
-              {#if hasTagsProperty && entryTags.length === 0}
-                <span class="empty-property-label">Tags</span>
-              {/if}
             </div>
           {/if}
         </div>
@@ -1198,6 +1213,20 @@
       </div>
     {/each}
   </div>
+
+  {#if visibleEntryData.length === 0 && entryData.length > 0}
+    <div class="no-results">
+      <p>
+        No notes match the current filters{#if activeFilterSummary}
+          : {activeFilterSummary}{/if}.
+      </p>
+      {#if activeTagFilterCount > 0 && listFile}
+        <button type="button" onclick={handleClearTagFilters}>
+          Clear tag filters
+        </button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -1560,64 +1589,32 @@
     margin: 0 0.25rem;
   }
 
-  .tag-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    align-items: center;
-  }
-
-  .filter-tag-cloud {
+  .filter-tag-slot {
     flex: 1 1 auto;
     min-width: 0;
   }
 
-  .entry-tag-cloud {
-    padding: 0.25rem 0;
+  .no-results {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    text-align: left;
   }
 
-  .tag-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.2rem 0.55rem;
+  .no-results button {
+    padding: 0.3rem 0.7rem;
     border: 1px solid var(--background-modifier-border);
-    border-radius: 999px;
+    border-radius: 4px;
     background-color: var(--background-primary);
     color: var(--text-normal);
     cursor: pointer;
-    font-size: 0.8rem;
-    line-height: 1.2;
+    font-size: 0.85rem;
   }
 
-  .tag-button:hover {
-    border-color: var(--interactive-accent);
-  }
-
-  .tag-button .tag-count {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-  }
-
-  .tag-button.tag-zero {
-    opacity: 0.45;
-  }
-
-  .tag-button.tag-hidden {
-    text-decoration: line-through;
-    opacity: 0.55;
-  }
-
-  .tag-button.tag-only-show {
-    border-color: #2563eb;
-    box-shadow:
-      0 0 0 1px #2563eb,
-      0 0 8px rgba(59, 130, 246, 0.7);
-  }
-
-  .tag-button.tag-selected {
-    background-color: var(--interactive-accent);
-    color: var(--text-on-accent);
+  .no-results button:hover {
     border-color: var(--interactive-accent);
   }
 </style>
